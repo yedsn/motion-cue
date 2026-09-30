@@ -80,3 +80,27 @@ jobs:
           prerelease: false
           includeDebug: false
           args: --bundles nsis
+
+  sync-gitee:
+    name: Sync release to Gitee
+    runs-on: [self-hosted, linux, x64, gitee-sync]
+    needs: publish
+    env:
+      PYTHONUNBUFFERED: "1"
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GITEE_ACCESS_TOKEN: ${{ secrets.GITEE_ACCESS_TOKEN }}
+      https_proxy: http://192.168.3.36:7890
+      http_proxy: http://192.168.3.36:7890
+      no_proxy: gitee.com,localhost,127.0.0.1
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Skip when Gitee token is not configured
+        if: ${{ env.GITEE_ACCESS_TOKEN == '' }}
+        run: echo "GITEE_ACCESS_TOKEN is not configured, skipping Gitee release sync."
+
+      - name: Sync GitHub release assets to Gitee
+        if: ${{ env.GITEE_ACCESS_TOKEN != '' }}
+        run: python3 scripts/release/sync_gitee_release.py --tag "${{ github.ref_name }}" --github-owner yedsn --github-repo motion-cue --gitee-owner hongxiaojian --gitee-repo motion-cue --target-commitish main --proxy http://192.168.3.36:7890
