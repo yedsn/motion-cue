@@ -51,13 +51,24 @@ async function preview(animation = draft) {
   previewing.value = true;
   message.value = "正在播放动画预览";
   try {
-    await previewAnimation(cloneAnimation(animation), animation.id === draft.id && draft.text ? { text: draft.text } : {});
+    await withTimeout(
+      previewAnimation(cloneAnimation(animation), animation.id === draft.id && draft.text ? { text: draft.text } : {}),
+      3000,
+      "动画预览请求超时，请稍后重试",
+    );
     message.value = "动画预览已触发";
   } catch (error) {
     message.value = String(error);
   } finally {
     previewing.value = false;
   }
+}
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, timeoutMessage: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = window.setTimeout(() => reject(new Error(timeoutMessage)), timeoutMs);
+    promise.then(resolve, reject).finally(() => window.clearTimeout(timer));
+  });
 }
 
 async function previewPlugin(pluginId: string) {

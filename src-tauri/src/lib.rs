@@ -230,9 +230,11 @@ fn setup_tray(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let mute = MenuItem::with_id(app, "mute", "切换全局静音", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&open, &stop, &mute, &quit])?;
-    TrayIconBuilder::with_id("motioncue")
+    let tray = TrayIconBuilder::with_id("motioncue")
+        .icon(app.default_window_icon().cloned().ok_or("默认窗口图标不可用")?)
         .menu(&menu)
-        .tooltip("MotionCue")
+        .tooltip("MotionCue");
+    tray
         .on_menu_event(|app, event| match event.id.as_ref() {
             "open" => {
                 let _ = app_open(app.clone());
@@ -386,6 +388,26 @@ fn play_request(
     result
 }
 
+fn preview_request_async(
+    app: AppHandle,
+    animation: models::AnimationDefinition,
+    params: BTreeMap<String, String>,
+) {
+    tauri::async_runtime::spawn(async move {
+        let state = app.state::<AppState>();
+        let command = animation.command.clone();
+        if let Err(error) =
+            state
+                .playback
+                .preview(&app, &state.config, &state.diagnostics, animation, params)
+        {
+            state
+                .diagnostics
+                .record("error", "playback", error, Some(&command));
+        }
+    });
+}
+
 #[tauri::command]
 fn config_get(state: tauri::State<'_, AppState>) -> AppConfig {
     state.config.get()
@@ -467,17 +489,9 @@ fn animation_preview(
     animation: models::AnimationDefinition,
     params: BTreeMap<String, String>,
 ) -> Result<(), String> {
-    let state = app.state::<AppState>();
-    let command = animation.command.clone();
-    let result = state
-        .playback
-        .preview(&app, &state.config, &state.diagnostics, animation, params);
-    if let Err(error) = &result {
-        state
-            .diagnostics
-            .record("error", "playback", error, Some(&command));
-    }
-    result
+    catalog::validate_animation(&animation)?;
+    preview_request_async(app, animation, params);
+    Ok(())
 }
 
 #[tauri::command]

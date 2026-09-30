@@ -137,6 +137,7 @@ impl PlaybackCoordinator {
                 window
                     .show()
                     .map_err(|error| format!("显示覆盖窗口失败: {error}"))?;
+                apply_overlay_runtime_flags(&window, config.settings.overlay_topmost)?;
                 let mut window_request = request.clone();
                 window_request.play_audio = request.play_audio && index == 0;
                 if index > 0 {
@@ -332,23 +333,9 @@ impl PlaybackCoordinator {
             window
                 .set_focusable(false)
                 .map_err(|error| format!("禁用覆盖窗口焦点失败: {error}"))?;
-            if let Err(error) = window.set_ignore_cursor_events(true) {
+            if let Err(error) = apply_overlay_runtime_flags(&window, overlay_topmost) {
                 let _ = window.hide();
-                return Err(format!("启用鼠标穿透失败，覆盖窗口已隐藏: {error}"));
-            }
-            #[cfg(target_os = "windows")]
-            if let Err(error) = apply_native_click_through(&window) {
-                let _ = window.hide();
-                return Err(format!(
-                    "设置 Windows 鼠标穿透样式失败，覆盖窗口已隐藏: {error}"
-                ));
-            }
-            #[cfg(target_os = "windows")]
-            if let Err(error) = apply_native_topmost(&window, overlay_topmost) {
-                let _ = window.hide();
-                return Err(format!(
-                    "设置 Windows 覆盖窗口层级失败，覆盖窗口已隐藏: {error}"
-                ));
+                return Err(error);
             }
             self.overlays
                 .lock()
@@ -375,6 +362,25 @@ impl PlaybackCoordinator {
         }
         Ok(labels)
     }
+}
+
+fn apply_overlay_runtime_flags(
+    window: &WebviewWindow,
+    overlay_topmost: bool,
+) -> Result<(), String> {
+    if let Err(error) = window.set_ignore_cursor_events(true) {
+        return Err(format!("启用鼠标穿透失败，覆盖窗口已隐藏: {error}"));
+    }
+    let _ = window.set_always_on_top(overlay_topmost);
+    let _ = window.set_skip_taskbar(true);
+    let _ = window.set_focusable(false);
+    #[cfg(target_os = "windows")]
+    apply_native_click_through(window)
+        .map_err(|error| format!("设置 Windows 鼠标穿透样式失败，覆盖窗口已隐藏: {error}"))?;
+    #[cfg(target_os = "windows")]
+    apply_native_topmost(window, overlay_topmost)
+        .map_err(|error| format!("设置 Windows 覆盖窗口层级失败，覆盖窗口已隐藏: {error}"))?;
+    Ok(())
 }
 
 fn get_or_build_overlay(
