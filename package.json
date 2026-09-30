@@ -1,41 +1,42 @@
 {
-  "name": "motion-cue",
-  "version": "0.1.0",
-  "private": true,
-  "type": "module",
-  "scripts": {
-    "dev": "vite --host 127.0.0.1",
-    "build": "vue-tsc --noEmit && vite build",
-    "typecheck": "vue-tsc --noEmit",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "tauri": "tauri",
-    "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build",
-    "docs:dev": "vitepress dev docs",
-    "docs:build": "vitepress build docs",
-    "docs:preview": "vitepress preview docs"
-  },
-  "dependencies": {
-    "@tauri-apps/api": "^2.8.0",
-    "@tauri-apps/plugin-dialog": "^2.4.0",
-    "canvas-confetti": "^1.9.4",
-    "howler": "^2.2.4",
-    "lucide-vue-next": "^0.468.0",
-    "vue": "^3.5.13"
-  },
-  "devDependencies": {
-    "@rollup/rollup-win32-x64-msvc": "^4.63.5",
-    "@tauri-apps/cli": "^2.8.4",
-    "@tauri-apps/cli-win32-x64-msvc": "^2.12.0",
-    "@types/canvas-confetti": "^1.9.0",
-    "@types/howler": "^2.2.13",
-    "@vitejs/plugin-vue": "^5.2.1",
-    "jsdom": "^29.1.1",
-    "typescript": "^5.7.2",
-    "vite": "^6.0.3",
-    "vitepress": "^1.6.4",
-    "vitest": "^3.2.4",
-    "vue-tsc": "^2.1.10"
-  }
+    "name": "motion-cue",
+    "version": "0.1.1",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "dev": "vite --host 127.0.0.1",
+        "build": "vue-tsc --noEmit && vite build",
+        "typecheck": "vue-tsc --noEmit",
+        "test": "vitest run",
+        "test:watch": "vitest",
+        "tauri": "tauri",
+        "tauri:dev": "tauri dev",
+        "tauri:build": "tauri build",
+        "docs:dev": "vitepress dev docs",
+        "docs:build": "vitepress build docs",
+        "docs:preview": "vitepress preview docs"
+    },
+    "dependencies": {
+        "@tauri-apps/api": "^2.8.0",
+        "@tauri-apps/plugin-dialog": "^2.4.0",
+        "canvas-confetti": "^1.9.4",
+        "howler": "^2.2.4",
+        "lucide-vue-next": "^0.468.0",
+        "motion-cue": "file:",
+        "vue": "^3.5.13"
+    },
+    "devDependencies": {
+        "@rollup/rollup-win32-x64-msvc": "^4.63.5",
+        "@tauri-apps/cli": "^2.8.4",
+        "@tauri-apps/cli-win32-x64-msvc": "^2.12.0",
+        "@types/canvas-confetti": "^1.9.0",
+        "@types/howler": "^2.2.13",
+        "@vitejs/plugin-vue": "^5.2.1",
+        "jsdom": "^29.1.1",
+        "typescript": "^5.7.2",
+        "vite": "^6.0.3",
+        "vitepress": "^1.6.4",
+        "vitest": "^3.2.4",
+        "vue-tsc": "^2.1.10"
+    }
 }

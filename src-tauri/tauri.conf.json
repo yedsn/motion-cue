@@ -1,53 +1,53 @@
 {
-  "$schema": "https://schema.tauri.app/config/2",
-  "productName": "MotionCue",
-  "version": "0.1.0",
-  "identifier": "com.motioncue.desktop",
-  "build": {
-    "beforeDevCommand": "npm run dev",
-    "devUrl": "http://127.0.0.1:5191",
-    "beforeBuildCommand": "npm run build",
-    "frontendDist": "../dist"
-  },
-  "app": {
-    "windows": [
-      {
-        "label": "main",
-        "title": "MotionCue",
-        "url": "/?view=management",
-        "width": 1120,
-        "height": 760,
-        "minWidth": 920,
-        "minHeight": 620,
-        "resizable": true,
-        "decorations": false,
-        "center": true,
-        "visible": true
-      }
-    ],
-    "security": {
-      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline' blob: data:; style-src 'self' 'unsafe-inline'; img-src 'self' asset: data: blob:; media-src 'self' asset: data: blob:; font-src 'self' data:; frame-src about: data: blob:; child-src about: data: blob:; connect-src ipc: http://ipc.localhost"
-    }
-  },
-  "plugins": {
-    "deep-link": {
-      "desktop": {
-        "schemes": [
-          "motioncue"
-        ]
-      }
-    }
-  },
-  "bundle": {
-    "active": true,
-    "targets": [
-      "nsis"
-    ],
-    "icon": [
-      "icons/32x32.png",
-      "icons/128x128.png",
-      "icons/128x128@2x.png",
-      "icons/icon.ico"
-    ]
-  }
+    "$schema":  "https://schema.tauri.app/config/2",
+    "productName":  "MotionCue",
+    "version":  "0.1.1",
+    "identifier":  "com.motioncue.desktop",
+    "build":  {
+                  "beforeDevCommand":  "npm run dev",
+                  "devUrl":  "http://127.0.0.1:5191",
+                  "beforeBuildCommand":  "npm run build",
+                  "frontendDist":  "../dist"
+              },
+    "app":  {
+                "windows":  [
+                                {
+                                    "label":  "main",
+                                    "title":  "MotionCue",
+                                    "url":  "/?view=management",
+                                    "width":  1120,
+                                    "height":  760,
+                                    "minWidth":  920,
+                                    "minHeight":  620,
+                                    "resizable":  true,
+                                    "decorations":  false,
+                                    "center":  true,
+                                    "visible":  true
+                                }
+                            ],
+                "security":  {
+                                 "csp":  "default-src \u0027self\u0027; script-src \u0027self\u0027 \u0027unsafe-inline\u0027 blob: data:; style-src \u0027self\u0027 \u0027unsafe-inline\u0027; img-src \u0027self\u0027 asset: data: blob:; media-src \u0027self\u0027 asset: data: blob:; font-src \u0027self\u0027 data:; frame-src about: data: blob:; child-src about: data: blob:; connect-src ipc: http://ipc.localhost"
+                             }
+            },
+    "plugins":  {
+                    "deep-link":  {
+                                      "desktop":  {
+                                                      "schemes":  [
+                                                                      "motioncue"
+                                                                  ]
+                                                  }
+                                  }
+                },
+    "bundle":  {
+                   "active":  true,
+                   "targets":  [
+                                   "nsis"
+                               ],
+                   "icon":  [
+                                "icons/32x32.png",
+                                "icons/128x128.png",
+                                "icons/128x128@2x.png",
+                                "icons/icon.ico"
+                            ]
+               }
 }
