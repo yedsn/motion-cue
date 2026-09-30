@@ -11,6 +11,7 @@ export const playAnimation = (command: string, params: Record<string, string> = 
 export const previewAnimation = (animation: AnimationDefinition, params: Record<string, string> = {}) => invoke<void>("animation_preview", { animation, params });
 export const stopAnimations = () => invoke<void>("animation_stop_all");
 export const importAudio = (path: string) => invoke<string>("audio_import", { path });
+export const getAudioResource = (resourceId: string) => invoke<string>("audio_resource", { resourceId });
 export const exportAnimation = (id: string, path: string) => invoke<void>("animation_export", { id, path });
 export const importAnimation = (path: string) => invoke<AppConfig>("animation_import", { path });
 export const installPlugin = (path: string, allowUpgrade = false) => invoke<AppConfig>("plugin_install", { path, allowUpgrade });

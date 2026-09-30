@@ -3,7 +3,7 @@ import { computed, onMounted, reactive, ref } from "vue";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Activity, Ban, Box, ChevronRight, CirclePlay, Download, Minus, Music2, PackagePlus, Plus, RotateCcw, Save, Settings2, Sparkles, Square, Trash2, Upload, X } from "lucide-vue-next";
-import { deleteAnimation, exportAnimation, getConfig, getDiagnostics, importAnimation, importAudio, installPlugin, previewAnimation, resetAnimation, saveAnimation, setPluginEnabled, stopAnimations, uninstallPlugin, updateSettings } from "../services/tauri";
+import { deleteAnimation, exportAnimation, getAudioResource, getConfig, getDiagnostics, importAnimation, importAudio, installPlugin, previewAnimation, resetAnimation, saveAnimation, setPluginEnabled, stopAnimations, uninstallPlugin, updateSettings } from "../services/tauri";
 import { validateAnimation } from "../services/schemas";
 import type { AnimationDefinition, AppConfig, DiagnosticEntry } from "../types";
 
@@ -25,6 +25,7 @@ const selectedId = ref("task-complete");
 const page = ref<"animations" | "plugins" | "settings" | "diagnostics">("animations");
 const message = ref("");
 const previewing = ref(false);
+const externalAudioSelected = ref(false);
 const draft = reactive<AnimationDefinition>(emptyAnimation());
 const currentWindow = getCurrentWindow();
 
@@ -32,9 +33,11 @@ const selected = computed(() => config.value?.animations.find((animation) => ani
 const plugins = computed(() => config.value?.plugins ?? []);
 const validation = computed(() => validateAnimation(draft));
 const audioResourceLabel = computed(() => builtinAudioOptions.find((item) => item.id === draft.audio.resourceId)?.name ?? (draft.audio.resourceId?.startsWith("audio/") ? "外置音效" : "未选择"));
+const hasAudio = computed(() => Boolean(draft.audio.resourceId));
+const isExternalAudio = computed(() => externalAudioSelected.value || (draft.audio.resourceId?.startsWith("audio/") ?? false));
 const audioSelection = computed({
-  get: () => draft.audio.resourceId?.startsWith("builtin/") ? draft.audio.resourceId : draft.audio.resourceId?.startsWith("audio/") ? "__external__" : "",
-  set: (value: string) => { if (value !== "__external__") useBuiltinAudio(value); },
+  get: () => draft.audio.resourceId?.startsWith("builtin/") ? draft.audio.resourceId : isExternalAudio.value ? "__external__" : "",
+  set: (value: string) => { if (value === "__external__") useExternalAudio(); else useBuiltinAudio(value); },
 });
 const transitionOverrideEnabled = computed({
   get: () => Boolean(draft.transition),
@@ -46,7 +49,7 @@ function defaultTransition() {
 }
 
 function emptyAnimation(): AnimationDefinition {
-  return { id: crypto.randomUUID(), kind: "configured", name: "新动画", description: "自定义动画", command: "new-animation", aliases: [], enabled: true, renderer: "confetti", durationMs: config.value?.settings.defaultDurationMs ?? 3000, target: config.value?.settings.defaultTarget ?? "all", text: "完成", colors: ["#c9ef8f", "#91f5d4"], options: { particleCount: 100, angle: 58 }, audio: { enabled: false, volume: config.value?.settings.defaultVolume ?? 0.6, delayMs: 0, resourceId: builtinAudioOptions[0].id } };
+  return { id: crypto.randomUUID(), kind: "configured", name: "新动画", description: "自定义动画", command: "new-animation", aliases: [], enabled: true, renderer: "confetti", durationMs: config.value?.settings.defaultDurationMs ?? 3000, target: config.value?.settings.defaultTarget ?? "all", text: "完成", colors: ["#c9ef8f", "#91f5d4"], options: { particleCount: 100, angle: 58 }, audio: { enabled: false, volume: config.value?.settings.defaultVolume ?? 0.6, delayMs: 0 } };
 }
 
 function cloneAnimation(animation: AnimationDefinition): AnimationDefinition {
@@ -56,6 +59,7 @@ function cloneAnimation(animation: AnimationDefinition): AnimationDefinition {
 function edit(animation?: AnimationDefinition) {
   const next = cloneAnimation(animation ?? emptyAnimation());
   Object.assign(draft, next);
+  externalAudioSelected.value = next.audio.resourceId?.startsWith("audio/") ?? false;
   if (!next.transition) delete draft.transition;
 }
 
@@ -147,12 +151,36 @@ async function chooseAudio() {
   if (typeof path === "string") {
     draft.audio.resourceId = await importAudio(path);
     draft.audio.enabled = true;
+    externalAudioSelected.value = true;
+    await previewSelectedAudio(draft.audio.resourceId);
   }
 }
 
 function useBuiltinAudio(resourceId: string) {
+  externalAudioSelected.value = false;
   draft.audio.resourceId = resourceId || undefined;
   draft.audio.enabled = Boolean(resourceId);
+  if (resourceId) void previewSelectedAudio(resourceId);
+}
+
+function useExternalAudio() {
+  externalAudioSelected.value = true;
+  if (draft.audio.resourceId?.startsWith("builtin/")) {
+    draft.audio.resourceId = undefined;
+    draft.audio.enabled = false;
+  }
+}
+
+async function previewSelectedAudio(resourceId = draft.audio.resourceId) {
+  if (!resourceId) return;
+  try {
+    const source = resourceId.startsWith("builtin/") ? `/audio/${resourceId.slice("builtin/".length)}` : await getAudioResource(resourceId);
+    const audio = new Audio(source);
+    audio.volume = draft.audio.volume;
+    await audio.play();
+  } catch (error) {
+    message.value = `音效试听失败：${String(error)}`;
+  }
 }
 
 function enableTransitionOverride() {
@@ -214,10 +242,11 @@ onMounted(async () => { await reload(); await loadDiagnostics(); });
             <label>粒子数量<input v-model.number="draft.options.particleCount" type="number" min="1" max="500" /></label>
             <label>喷发方向（角度）<input v-model.number="draft.options.angle" type="number" min="0" max="180" /></label>
             <label>主题颜色<input v-model="draft.colors[0]" type="color" /></label>
-            <label>音效来源<select v-model="audioSelection"><option value="">不选择</option><option v-for="audio in builtinAudioOptions" :key="audio.id" :value="audio.id">内置 · {{ audio.name }}</option><option value="__external__" disabled>外置 · {{ audioResourceLabel }}</option></select></label>
+            <label>音效来源<select v-model="audioSelection"><option value="">不选择</option><option v-for="audio in builtinAudioOptions" :key="audio.id" :value="audio.id">内置 · {{ audio.name }}</option><option value="__external__">外置音效</option></select></label>
+            <label class="audio-picker">当前音效<input :value="audioResourceLabel" readonly /><button type="button" :disabled="!hasAudio" @click="previewSelectedAudio()"><CirclePlay :size="14" />试听</button></label>
             <label>音量<input v-model.number="draft.audio.volume" type="range" min="0" max="1" step="0.05" /></label>
             <label>音效延迟<input v-model.number="draft.audio.delayMs" type="number" min="0" :max="draft.durationMs" /></label>
-            <label class="audio-picker">外置音效<input :value="audioResourceLabel" readonly /><button type="button" @click="chooseAudio"><Music2 :size="14" />导入</button></label>
+            <label v-if="isExternalAudio" class="audio-picker span-2">外置音效<input :value="draft.audio.resourceId" readonly /><button type="button" @click="chooseAudio"><Music2 :size="14" />导入/替换</button></label>
             <label class="switch span-2"><input v-model="transitionOverrideEnabled" type="checkbox" />单独覆盖该动画的开始/结尾效果</label>
             <template v-if="draft.transition">
               <label>开始效果<select v-model="draft.transition.enter"><option v-for="option in transitionOptions" :key="option.value" :value="option.value">{{ option.label }}</option></select></label>

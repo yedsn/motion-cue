@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::sync::Arc;
 
+use base64::Engine;
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Emitter, Manager};
@@ -156,6 +157,14 @@ fn run(initial_intent: LaunchIntent) -> Result<(), String> {
             let app_handle = app.handle().clone();
             start_server(app.handle().clone(), endpoint, handle_ipc)?;
             setup_tray(app)?;
+            if let Err(error) = app.deep_link().register_all() {
+                app.state::<AppState>().diagnostics.record(
+                    "warning",
+                    "invocation",
+                    format!("注册自定义链接失败: {error}"),
+                    None,
+                );
+            }
             let deep_link_app = app.handle().clone();
             app.deep_link().on_open_url(move |event| {
                 for url in event.urls() {
@@ -199,6 +208,7 @@ fn run(initial_intent: LaunchIntent) -> Result<(), String> {
             animation_export,
             animation_import,
             audio_import,
+            audio_resource,
             diagnostics_get,
             diagnostics_record,
             plugins_get,
@@ -716,6 +726,30 @@ fn audio_import(app: AppHandle, path: String) -> Result<String, String> {
     }
     std::fs::copy(source, &target).map_err(|error| format!("保存音效失败: {error}"))?;
     Ok(id)
+}
+
+#[tauri::command]
+fn audio_resource(app: AppHandle, resource_id: String) -> Result<String, String> {
+    if !resource_id.starts_with("audio/")
+        || resource_id.contains("..")
+        || resource_id.contains('\\')
+        || PathBuf::from(&resource_id).is_absolute()
+    {
+        return Err("仅支持试听已导入的外置音效".into());
+    }
+    let path = app
+        .path()
+        .app_data_dir()
+        .map_err(|error| error.to_string())?
+        .join("resources")
+        .join(&resource_id);
+    let data = std::fs::read(&path).map_err(|error| format!("读取外置音效失败: {error}"))?;
+    let mime = mime_guess::from_path(&path).first_or_octet_stream();
+    Ok(format!(
+        "data:{};base64,{}",
+        mime,
+        base64::engine::general_purpose::STANDARD.encode(data)
+    ))
 }
 
 #[tauri::command]
