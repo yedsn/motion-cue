@@ -94,7 +94,7 @@ async function playPlugin(request: PlaybackRequest) {
   frame.referrerPolicy = "no-referrer";
   frame.dataset.pluginId = request.animation.pluginId;
   const postPlay = () => {
-    frame.contentWindow?.postMessage({ version: 1, sessionId: request.sessionId, type: "play", payload: { params: request.params, viewport: { width: innerWidth, height: innerHeight } } }, "*");
+    frame.contentWindow?.postMessage({ version: 1, sessionId: request.sessionId, type: "play", payload: { params: request.params, targetFrameRate: request.targetFrameRate, viewport: { width: innerWidth, height: innerHeight } } }, "*");
   };
   frame.addEventListener("load", () => {
     frameLoaded = true;

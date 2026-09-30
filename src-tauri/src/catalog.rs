@@ -11,6 +11,7 @@ pub fn default_config() -> AppConfig {
         settings: crate::models::GlobalSettings {
             muted: false,
             overlay_topmost: true,
+            target_frame_rate: 60,
             default_target: MonitorTarget::All,
             default_duration_ms: 3000,
             default_volume: 0.6,

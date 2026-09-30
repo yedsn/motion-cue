@@ -22,9 +22,37 @@
       "type": "node-terminal"
     },
     {
+      "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/release/release.ps1 -Push",
+      "cwd": "${workspaceFolder}",
+      "name": "release",
+      "request": "launch",
+      "type": "node-terminal"
+    },
+    {
       "command": "npm run typecheck",
       "cwd": "${workspaceFolder}",
       "name": "typecheck",
+      "request": "launch",
+      "type": "node-terminal"
+    },
+    {
+      "command": "npm run docs:dev",
+      "cwd": "${workspaceFolder}",
+      "name": "docs dev",
+      "request": "launch",
+      "type": "node-terminal"
+    },
+    {
+      "command": "npm run docs:build",
+      "cwd": "${workspaceFolder}",
+      "name": "docs build",
+      "request": "launch",
+      "type": "node-terminal"
+    },
+    {
+      "command": "npm run docs:preview",
+      "cwd": "${workspaceFolder}",
+      "name": "docs preview",
       "request": "launch",
       "type": "node-terminal"
     },

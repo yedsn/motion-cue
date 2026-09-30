@@ -1,0 +1,82 @@
+name: Release
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
+  CARGO_HTTP_TIMEOUT: 600
+  CARGO_HTTP_LOW_SPEED_LIMIT: 1
+  CARGO_HTTP_LOW_SPEED_TIME: 600
+
+jobs:
+  publish:
+    name: Build Windows bundle
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Validate release tag version
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          if ($tag -notmatch '^v(.+)$') { throw "Release tag must start with v." }
+          $version = $Matches[1]
+          $package = Get-Content package.json -Raw -Encoding UTF8 | ConvertFrom-Json
+          $tauri = Get-Content src-tauri/tauri.conf.json -Raw -Encoding UTF8 | ConvertFrom-Json
+          $cargo = Get-Content src-tauri/Cargo.toml -Raw -Encoding UTF8
+          $cargoVersionMatch = [regex]::Match($cargo, '(?m)^version\s*=\s*"([^"]+)"\s*$')
+          if (-not $cargoVersionMatch.Success) { throw "Cargo.toml version field was not found." }
+          $cargoVersion = $cargoVersionMatch.Groups[1].Value
+          if ($package.version -ne $version) { throw "package.json version $($package.version) does not match tag $tag." }
+          if ($tauri.version -ne $version) { throw "tauri.conf.json version $($tauri.version) does not match tag $tag." }
+          if ($cargoVersion -ne $version) { throw "Cargo.toml version $cargoVersion does not match tag $tag." }
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Cache Rust artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            src-tauri -> src-tauri/target
+
+      - name: Build bundle and publish release assets
+        uses: tauri-apps/tauri-action@v0.6.2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: MotionCue ${{ github.ref_name }}
+          releaseBody: |
+            Automated GitHub Release for MotionCue.
+
+            - Includes the Windows NSIS installer.
+            - Built from the tagged source with Tauri.
+          releaseDraft: false
+          prerelease: false
+          includeDebug: false
+          args: --bundles nsis

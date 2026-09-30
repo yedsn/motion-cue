@@ -2,6 +2,7 @@ node_modules/
 dist/
 src-tauri/target/
 .vite/
+docs/.vitepress/dist/
 .tmp/
 *.log
-
+cache

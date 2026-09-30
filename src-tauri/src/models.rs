@@ -91,6 +91,8 @@ pub struct GlobalSettings {
     pub muted: bool,
     #[serde(default = "default_overlay_topmost")]
     pub overlay_topmost: bool,
+    #[serde(default = "default_target_frame_rate")]
+    pub target_frame_rate: u32,
     pub default_target: MonitorTarget,
     #[serde(default = "default_duration_ms")]
     pub default_duration_ms: u64,
@@ -110,6 +112,10 @@ fn default_volume() -> f64 {
 
 fn default_overlay_topmost() -> bool {
     true
+}
+
+fn default_target_frame_rate() -> u32 {
+    60
 }
 
 pub fn default_transition() -> MotionTransitionConfig {
@@ -187,6 +193,7 @@ pub struct PlaybackRequest {
     pub params: BTreeMap<String, String>,
     pub started_at: u64,
     pub play_audio: bool,
+    pub target_frame_rate: u32,
     pub transition: MotionTransitionConfig,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub audio_data_url: Option<String>,

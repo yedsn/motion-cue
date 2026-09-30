@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" role="img" aria-label="MotionCue">
+  <rect width="96" height="96" rx="22" fill="#171717"/>
+  <path d="M24 30h12l12 18 12-18h12v36H60V48L48 66 36 48v18H24z" fill="#ef6c46"/>
+  <circle cx="76" cy="24" r="6" fill="#ffd166"/>
+</svg>

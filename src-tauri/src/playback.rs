@@ -121,6 +121,7 @@ impl PlaybackCoordinator {
             params,
             started_at,
             play_audio: animation.audio.enabled && !config.settings.muted,
+            target_frame_rate: config.settings.target_frame_rate,
             transition: animation
                 .transition
                 .clone()
@@ -802,6 +803,7 @@ mod tests {
             params: BTreeMap::new(),
             started_at: 1,
             play_audio: true,
+            target_frame_rate: 60,
             transition: crate::models::default_transition(),
             audio_data_url: Some("data:audio/wav;base64,AA==".into()),
         };

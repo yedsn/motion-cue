@@ -2,6 +2,8 @@
 
 MotionCue 是一个 Windows 优先的全屏动画与音效触发器。它常驻系统托盘，允许其他应用、Hook 和脚本通过自定义链接或命令行触发透明、置顶、鼠标穿透的多显示器动画。
 
+文档站：<https://yedsn.github.io/motion-cue/>
+
 ## 调用方式
 
 ```text
@@ -58,4 +60,3 @@ npm run tauri:build
 - 安全桌面、UAC 提权界面、锁屏和全屏独占游戏可能覆盖 MotionCue；应用不会通过注入或提升权限绕过系统限制。
 - 混合 DPI、多显示器热插拔和鼠标穿透依赖 Windows WebView2 与窗口管理能力。
 - 插件采用运行时间、消息大小、消息频率和资源包大小限制，但不承诺精确的跨设备 CPU/GPU 配额。
-

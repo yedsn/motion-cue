@@ -98,6 +98,9 @@ pub fn validate_config(config: &AppConfig) -> Result<(), String> {
     {
         return Err("全局动画默认值超出安全范围".into());
     }
+    if !(30..=60).contains(&config.settings.target_frame_rate) {
+        return Err("动画目标帧率必须在 30 到 60 之间".into());
+    }
     validate_transition(
         config.settings.default_transition.enter_ms,
         config.settings.default_transition.exit_ms,

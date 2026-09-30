@@ -7,6 +7,7 @@ const request: PlaybackRequest = {
   params: {},
   startedAt: 1,
   playAudio: true,
+  targetFrameRate: 60,
   transition: { enter: "fade", exit: "fade", enterMs: 180, exitMs: 420 },
   animation: {
     id: "success", kind: "builtin", name: "Success", description: "", command: "success", aliases: [], enabled: true,

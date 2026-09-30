@@ -41,6 +41,7 @@ export type AnimationDefinition = {
 export type GlobalSettings = {
   muted: boolean;
   overlayTopmost: boolean;
+  targetFrameRate: number;
   defaultTarget: MonitorTarget;
   defaultDurationMs: number;
   defaultVolume: number;
@@ -95,6 +96,7 @@ export type PlaybackRequest = {
   params: Record<string, string>;
   startedAt: number;
   playAudio: boolean;
+  targetFrameRate: number;
   transition: MotionTransitionConfig;
   audioDataUrl?: string;
 };

@@ -23,7 +23,7 @@ export function renderAnimation(root: HTMLElement, request: PlaybackRequest): Ru
 
   const animation = request.animation;
   if (animation.renderer === "confetti" || animation.renderer === "completion") {
-    launchConfetti(fire, animation, request.transition, cleanups);
+    launchConfetti(fire, animation, request.transition, request.targetFrameRate, cleanups);
   }
   if (animation.renderer !== "confetti") {
     root.append(createBadge(animation));
@@ -85,14 +85,15 @@ export function effectiveTransition(request: PlaybackRequest): MotionTransitionC
   return request.transition;
 }
 
-function launchConfetti(fire: ReturnType<typeof confetti.create>, animation: AnimationDefinition, transition: MotionTransitionConfig, cleanups: Array<() => void>) {
+function launchConfetti(fire: ReturnType<typeof confetti.create>, animation: AnimationDefinition, transition: MotionTransitionConfig, targetFrameRate: number, cleanups: Array<() => void>) {
   const timers: number[] = [];
   const colors = animation.colors;
-  const particleCount = numberOption(animation, "particleCount", animation.renderer === "completion" ? 64 : 100);
+  const quality = renderQuality(targetFrameRate);
+  const particleCount = Math.max(1, Math.round(numberOption(animation, "particleCount", animation.renderer === "completion" ? 64 : 100) * quality.particleScale));
   const direction = numberOption(animation, "angle", 58);
   const shapes = particleShapes();
   const side = (x: number, angle: number, delay: number, count = particleCount) => {
-    timers.push(window.setTimeout(() => fire({ particleCount: Math.round(count * random(0.86, 1.14)), colors, angle: angle + random(-5, 5), spread: random(24, 38), startVelocity: random(58, 74), decay: random(.92, .95), gravity: random(.38, .62), drift: x < .5 ? random(.04,.18) : random(-.18,-.04), scalar: random(.72,1.12), ticks: Math.round(random(185,245)), origin: { x: x + random(-.02,.02), y: random(.88,.98) }, shapes }), delay));
+    timers.push(window.setTimeout(() => fire({ particleCount: Math.round(count * random(0.86, 1.14)), colors, angle: angle + random(-5, 5), spread: random(24, 38), startVelocity: random(58, 74), decay: random(.92, .95), gravity: random(.38, .62), drift: x < .5 ? random(.04,.18) : random(-.18,-.04), scalar: random(.72,1.12), ticks: Math.round(random(185,245) * quality.tickScale), origin: { x: x + random(-.02,.02), y: random(.88,.98) }, shapes }), delay));
   };
   side(0.03, direction, 0);
   side(0.97, 180 - direction, 40);
@@ -121,6 +122,17 @@ function particleShapes() {
 }
 
 function random(min: number, max: number) { return min + Math.random() * (max - min); }
+
+function normalizeFrameRate(value: number) {
+  return Math.min(60, Math.max(30, Math.round(Number.isFinite(value) ? value : 60)));
+}
+
+function renderQuality(targetFrameRate: number) {
+  const frameRate = normalizeFrameRate(targetFrameRate);
+  if (frameRate < 45) return { particleScale: 0.68, tickScale: 0.86 };
+  if (frameRate < 60) return { particleScale: 0.82, tickScale: 0.93 };
+  return { particleScale: 1, tickScale: 1 };
+}
 
 function createBadge(animation: AnimationDefinition) {
   const badge = document.createElement("section");

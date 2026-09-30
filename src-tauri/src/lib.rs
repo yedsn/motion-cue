@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use base64::Engine;
 use tauri::menu::{Menu, MenuItem};
-use tauri::tray::{TrayIconBuilder, TrayIconEvent};
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_deep_link::DeepLinkExt;
 
@@ -34,6 +34,7 @@ pub struct AppState {
 }
 
 pub fn entry() {
+    configure_webview_rendering();
     let args = std::env::args().skip(1).collect::<Vec<_>>();
     let intent = match parse_launch_args(&args) {
         Ok(intent) => intent,
@@ -67,6 +68,16 @@ pub fn entry() {
         }
     }
     let _ = run(intent);
+}
+
+fn configure_webview_rendering() {
+    #[cfg(target_os = "windows")]
+    if std::env::var_os("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS").is_none() {
+        std::env::set_var(
+            "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS",
+            "--enable-gpu --ignore-gpu-blocklist --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows",
+        );
+    }
 }
 
 fn cli_endpoint_path() -> PathBuf {
@@ -271,7 +282,17 @@ fn setup_tray(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         _ => {}
     })
     .on_tray_icon_event(|tray, event| {
-        if matches!(event, TrayIconEvent::DoubleClick { .. }) {
+        if matches!(
+            event,
+            TrayIconEvent::Click {
+                button: MouseButton::Left,
+                button_state: MouseButtonState::Up,
+                ..
+            } | TrayIconEvent::DoubleClick {
+                button: MouseButton::Left,
+                ..
+            }
+        ) {
             let _ = app_open(tray.app_handle().clone());
         }
     })
