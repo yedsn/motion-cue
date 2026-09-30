@@ -79,12 +79,15 @@ def request_no_content(method: str, url: str) -> None:
         fail(f"{method} {url} failed: {exc}")
 
 
-def download_file(url: str, target_path: Path, proxy: Optional[str]) -> None:
+def download_file(url: str, target_path: Path, proxy: Optional[str], headers: Optional[dict[str, str]] = None) -> None:
     handlers = []
     if proxy:
         handlers.append(urllib.request.ProxyHandler({"http": proxy, "https": proxy}))
     opener = urllib.request.build_opener(*handlers)
-    req = urllib.request.Request(url, headers={"User-Agent": "motion-cue-release-sync"})
+    request_headers = {"User-Agent": "motion-cue-release-sync"}
+    if headers:
+        request_headers.update(headers)
+    req = urllib.request.Request(url, headers=request_headers)
     try:
         with opener.open(req, timeout=DOWNLOAD_TIMEOUT_SECS) as response:
             with target_path.open("wb") as fh:
@@ -204,6 +207,8 @@ def main() -> None:
     else:
         github_url = f"https://api.github.com/repos/{args.github_owner}/{args.github_repo}/releases/latest"
     github_release = request_json("GET", github_url, headers=build_github_headers())
+    github_headers = build_github_headers()
+    asset_download_headers = {**github_headers, "Accept": "application/octet-stream"}
     tag_name = github_release.get("tag_name")
     assets = github_release.get("assets") or []
     if not tag_name or not assets:
@@ -217,12 +222,12 @@ def main() -> None:
         files: list[Path] = []
         for asset in assets:
             name = asset.get("name")
-            download_url = asset.get("browser_download_url")
+            download_url = asset.get("url") or asset.get("browser_download_url")
             if not name or not download_url:
                 continue
             source_path = tmp_root / name
             log(f"[sync-gitee] Downloading {name}")
-            download_file(download_url, source_path, args.proxy)
+            download_file(download_url, source_path, args.proxy, asset_download_headers)
             gitee_name = strip_version_from_filename(name)
             gitee_path = tmp_root / gitee_name
             if gitee_name != name:
