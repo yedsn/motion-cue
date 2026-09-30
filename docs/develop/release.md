@@ -1,6 +1,6 @@
 # GitHub Release
 
-MotionCue 通过 `.github/workflows/release.yml` 发布 Windows 安装包。
+MotionCue 通过 `.github/workflows/release.yml` 发布 Windows 安装包和 macOS 应用包。
 
 ## 推荐发布方式
 
@@ -37,7 +37,11 @@ git push origin v0.1.0
 - `src-tauri/tauri.conf.json`
 - `src-tauri/Cargo.toml`
 
-校验通过后会在 Windows runner 上构建 NSIS 安装包，并上传到对应的 GitHub Release。
+校验通过后会构建并上传以下 GitHub Release 资产：
+
+- Windows x64：NSIS 安装包
+- macOS Apple Silicon：`.app` 和 `.dmg`
+- macOS Intel：`.app` 和 `.dmg`
 
 ## Gitee Release 同步
 

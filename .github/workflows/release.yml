@@ -22,13 +22,40 @@ env:
 
 jobs:
   publish:
-    name: Build Windows bundle
-    runs-on: windows-latest
+    name: Build ${{ matrix.name }} bundle
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS Apple Silicon
+            os: macos-latest
+            rust_target: aarch64-apple-darwin
+            args: --target aarch64-apple-darwin --bundles app,dmg
+          - name: macOS Intel
+            os: macos-latest
+            rust_target: x86_64-apple-darwin
+            args: --target x86_64-apple-darwin --bundles app,dmg
+          - name: Windows x64
+            os: windows-latest
+            rust_target: ""
+            args: --bundles nsis
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
         with:
           fetch-depth: 0
+
+      - name: Use crates.io registry in CI
+        shell: pwsh
+        run: |
+          if (Test-Path .cargo/config.toml) {
+            Move-Item .cargo/config.toml .cargo/config.toml.local-disabled
+          }
+          if (Test-Path .cargo/config) {
+            Move-Item .cargo/config .cargo/config.local-disabled
+          }
 
       - name: Validate release tag version
         shell: pwsh
@@ -48,6 +75,10 @@ jobs:
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
+
+      - name: Install extra Rust target
+        if: matrix.rust_target != ''
+        run: rustup target add ${{ matrix.rust_target }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v5
@@ -75,11 +106,20 @@ jobs:
             Automated GitHub Release for MotionCue.
 
             - Includes the Windows NSIS installer.
+            - Includes macOS Apple Silicon and Intel DMG packages.
             - Built from the tagged source with Tauri.
+
+            ### macOS 用户注意事项
+
+            如果在 macOS 上打开应用时提示异常，请尝试在终端执行以下命令：
+
+            ```bash
+            xattr -cr /Applications/MotionCue.app
+            ```
           releaseDraft: false
           prerelease: false
           includeDebug: false
-          args: --bundles nsis
+          args: ${{ matrix.args }}
 
   sync-gitee:
     name: Sync release to Gitee
