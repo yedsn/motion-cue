@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "id": "adversarial-abuse-probe",
+  "name": "Adversarial Abuse Probe",
+  "version": "1.0.0",
+  "entry": "index.html",
+  "command": "adversarial-abuse-probe",
+  "aliases": [],
+  "resources": [],
+  "sounds": {},
+  "capabilities": { "webgl": false, "worker": false }
+}

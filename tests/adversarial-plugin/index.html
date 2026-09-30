@@ -1,0 +1,74 @@
+<!doctype html><html><head><meta charset="utf-8"></head><body><script>
+function blocked(value) { return value ? "unexpected" : "blocked"; }
+function wait(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
+function loadImage(src) {
+  return new Promise(resolve => {
+    const image = new Image();
+    image.onload = () => resolve("unexpected");
+    image.onerror = () => resolve("blocked");
+    image.src = src;
+    document.body.append(image);
+    setTimeout(() => resolve("blocked"), 800);
+  });
+}
+function loadScript(src) {
+  return new Promise(resolve => {
+    const script = document.createElement("script");
+    script.onload = () => resolve("unexpected");
+    script.onerror = () => resolve("blocked");
+    script.src = src;
+    document.body.append(script);
+    setTimeout(() => resolve("blocked"), 800);
+  });
+}
+function loadFrame(src) {
+  return new Promise(resolve => {
+    const frame = document.createElement("iframe");
+    frame.onload = () => resolve("unexpected");
+    frame.onerror = () => resolve("blocked");
+    frame.src = src;
+    document.body.append(frame);
+    setTimeout(() => resolve("blocked"), 800);
+  });
+}
+function openWebSocket(url) {
+  return new Promise(resolve => {
+    try {
+      const socket = new WebSocket(url);
+      socket.onopen = () => { socket.close(); resolve("unexpected"); };
+      socket.onerror = () => resolve("blocked");
+      setTimeout(() => resolve("blocked"), 800);
+    } catch {
+      resolve("blocked");
+    }
+  });
+}
+motionCue.onPlay(async () => {
+  const results = {};
+  try { await fetch("https://example.com"); results.network = "unexpected"; } catch { results.network = "blocked"; }
+  results.websocket = await openWebSocket("wss://example.com/socket");
+  results.remoteImage = await loadImage("https://example.com/pixel.png");
+  results.remoteScript = await loadScript("https://example.com/probe.js");
+  results.fileImage = await loadImage("file:///C:/Windows/win.ini");
+  results.fileFrame = await loadFrame("file:///C:/Windows/win.ini");
+  results.tauri = typeof window.__TAURI__ === "undefined" ? "blocked" : "unexpected";
+  results.node = typeof window.require === "undefined" && typeof window.process === "undefined" ? "blocked" : "unexpected";
+  try { void parent.document.body; results.parentDocument = "unexpected"; } catch { results.parentDocument = "blocked"; }
+  try { void top.document.body; results.topDocument = "unexpected"; } catch { results.topDocument = "blocked"; }
+  results.popup = blocked(window.open("https://example.com"));
+  results.filePicker = typeof window.showOpenFilePicker === "undefined" ? "blocked" : "unexpected";
+  const form = document.createElement("form");
+  form.action = "https://example.com";
+  form.method = "POST";
+  document.body.append(form);
+  try { form.submit(); await wait(200); results.form = "unexpected"; } catch { results.form = "blocked"; }
+  try { top.location.href = "https://example.com"; results.navigation = "unexpected"; } catch { results.navigation = "blocked"; }
+  try { localStorage.setItem("probe", "1"); results.storage = "unexpected"; } catch { results.storage = "blocked"; }
+  results.worker = typeof Worker === "undefined" ? "blocked" : "unexpected";
+  const canvas = document.createElement("canvas");
+  results.webgl = canvas.getContext("webgl") === null ? "blocked" : "unexpected";
+  if (results.navigation === "unexpected") results.navigation = location.href.includes("example.com") ? "unexpected" : "blocked";
+  motionCue.error(JSON.stringify(results));
+});
+motionCue.ready();
+</script></body></html>

@@ -1,0 +1,53 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "command": "codex-dsp",
+      "name": "codex",
+      "request": "launch",
+      "type": "node-terminal"
+    },
+    {
+      "command": "npm run tauri:dev",
+      "cwd": "${workspaceFolder}",
+      "name": "dev",
+      "request": "launch",
+      "type": "node-terminal"
+    },
+    {
+      "command": "npm run tauri:build",
+      "cwd": "${workspaceFolder}",
+      "name": "build",
+      "request": "launch",
+      "type": "node-terminal"
+    },
+    {
+      "command": "npm run typecheck",
+      "cwd": "${workspaceFolder}",
+      "name": "typecheck",
+      "request": "launch",
+      "type": "node-terminal"
+    },
+    {
+      "command": "npm test",
+      "cwd": "${workspaceFolder}",
+      "name": "test",
+      "request": "launch",
+      "type": "node-terminal"
+    },
+    {
+      "command": "pwsh -NoProfile -ExecutionPolicy Bypass -File tests/desktop-equivalent-acceptance.ps1",
+      "cwd": "${workspaceFolder}",
+      "name": "desktop acceptance",
+      "request": "launch",
+      "type": "node-terminal"
+    },
+    {
+      "command": "pwsh -NoProfile -ExecutionPolicy Bypass -File tests/adversarial-acceptance.ps1",
+      "cwd": "${workspaceFolder}",
+      "name": "adversarial acceptance",
+      "request": "launch",
+      "type": "node-terminal"
+    }
+  ]
+}
