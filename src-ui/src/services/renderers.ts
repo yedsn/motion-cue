@@ -1,6 +1,6 @@
 import confetti from "canvas-confetti";
 import { Howl } from "howler";
-import type { AnimationDefinition, PlaybackRequest } from "../types";
+import type { AnimationDefinition, MotionTransitionConfig, PlaybackRequest } from "../types";
 
 type Runtime = { stop: () => void };
 let customShapes: confetti.Shape[] | undefined;
@@ -8,6 +8,12 @@ let customShapes: confetti.Shape[] | undefined;
 export function renderAnimation(root: HTMLElement, request: PlaybackRequest): Runtime {
   root.replaceChildren();
   root.dataset.renderer = request.animation.renderer;
+  root.className = "overlay-root";
+  root.style.setProperty("--fx-duration", `${request.animation.durationMs}ms`);
+  root.style.setProperty("--fx-enter", `${request.transition.enterMs}ms`);
+  root.style.setProperty("--fx-exit", `${request.transition.exitMs}ms`);
+  root.style.setProperty("--fx-hold", `${Math.max(0, request.animation.durationMs - request.transition.enterMs - request.transition.exitMs)}ms`);
+  root.style.animation = transitionAnimation(request.transition, request.animation.durationMs);
   const cleanups: Array<() => void> = [];
   const canvas = document.createElement("canvas");
   canvas.className = "fx-canvas";
@@ -17,7 +23,7 @@ export function renderAnimation(root: HTMLElement, request: PlaybackRequest): Ru
 
   const animation = request.animation;
   if (animation.renderer === "confetti" || animation.renderer === "completion") {
-    launchConfetti(fire, animation, cleanups);
+    launchConfetti(fire, animation, request.transition, cleanups);
   }
   if (animation.renderer !== "confetti") {
     root.append(createBadge(animation));
@@ -32,7 +38,7 @@ export function renderAnimation(root: HTMLElement, request: PlaybackRequest): Ru
   let sound: Howl | undefined;
   let soundTimer: number | undefined;
   if (request.playAudio) {
-      const source = request.audioDataUrl ?? (animation.audio.resourceId === "builtin/completion-success.wav" ? "/audio/completion-success.wav" : undefined);
+    const source = audioSource(request);
     if (source) {
       soundTimer = window.setTimeout(() => {
         sound = new Howl({ src: [source], volume: animation.audio.volume, html5: false, pool: 1 });
@@ -48,16 +54,38 @@ export function renderAnimation(root: HTMLElement, request: PlaybackRequest): Ru
       sound?.stop();
       sound?.unload();
       root.replaceChildren();
+      root.style.animation = "";
     },
   };
 }
 
+export function transitionAnimation(transition: MotionTransitionConfig, durationMs: number) {
+  const animations: string[] = [];
+  if (transition.enter !== "none" && transition.enterMs > 0) {
+    animations.push(`overlay-enter-${transition.enter} ${transition.enterMs}ms ease-out both`);
+  }
+  const holdMs = Math.max(0, durationMs - transition.enterMs - transition.exitMs);
+  if (transition.exit !== "none" && transition.exitMs > 0) {
+    animations.push(`overlay-exit-${transition.exit} ${transition.exitMs}ms ease-in ${transition.enterMs + holdMs}ms both`);
+  }
+  return animations.join(", ");
+}
+
 export function audioSchedule(request: PlaybackRequest) {
-  const source = request.audioDataUrl ?? (request.animation.audio.resourceId === "builtin/completion-success.wav" ? "/audio/completion-success.wav" : undefined);
+  const source = audioSource(request);
   return { shouldPlay: request.playAudio && Boolean(source), source, delayMs: request.animation.audio.delayMs, volume: request.animation.audio.volume };
 }
 
-function launchConfetti(fire: ReturnType<typeof confetti.create>, animation: AnimationDefinition, cleanups: Array<() => void>) {
+export function audioSource(request: PlaybackRequest) {
+  const builtin = request.animation.audio.resourceId?.startsWith("builtin/") ? request.animation.audio.resourceId.replace("builtin/", "/audio/") : undefined;
+  return request.audioDataUrl ?? builtin;
+}
+
+export function effectiveTransition(request: PlaybackRequest): MotionTransitionConfig {
+  return request.transition;
+}
+
+function launchConfetti(fire: ReturnType<typeof confetti.create>, animation: AnimationDefinition, transition: MotionTransitionConfig, cleanups: Array<() => void>) {
   const timers: number[] = [];
   const colors = animation.colors;
   const particleCount = numberOption(animation, "particleCount", animation.renderer === "completion" ? 64 : 100);
@@ -68,11 +96,13 @@ function launchConfetti(fire: ReturnType<typeof confetti.create>, animation: Ani
   };
   side(0.03, direction, 0);
   side(0.97, 180 - direction, 40);
-  if (animation.renderer === "completion") {
-    side(0.08, direction + 4, 420, particleCount * .72);
-    side(0.92, 176 - direction, 520, particleCount * .72);
-    side(0.03, direction - 3, 900, particleCount * .46);
-    side(0.97, 183 - direction, 980, particleCount * .46);
+  const usableDuration = Math.max(600, animation.durationMs - transition.exitMs);
+  if (animation.renderer === "completion" || usableDuration > 3_600) {
+    for (const ratio of [0.24, 0.52, 0.78]) {
+      const delay = Math.min(usableDuration - 300, Math.round(usableDuration * ratio));
+      side(0.08, direction + 4, delay, particleCount * .48);
+      side(0.92, 176 - direction, delay + 90, particleCount * .48);
+    }
   }
   cleanups.push(() => timers.forEach((timer) => window.clearTimeout(timer)));
 }

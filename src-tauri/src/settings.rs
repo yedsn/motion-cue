@@ -2,7 +2,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::RwLock;
 
-use crate::catalog::{command_index, default_config, validate_animation};
+use crate::catalog::{command_index, default_config, validate_animation, validate_transition};
 use crate::models::{AppConfig, SCHEMA_VERSION};
 
 pub struct ConfigStore {
@@ -98,6 +98,11 @@ pub fn validate_config(config: &AppConfig) -> Result<(), String> {
     {
         return Err("全局动画默认值超出安全范围".into());
     }
+    validate_transition(
+        config.settings.default_transition.enter_ms,
+        config.settings.default_transition.exit_ms,
+        config.settings.default_duration_ms,
+    )?;
     for animation in &config.animations {
         validate_animation(animation)?;
     }

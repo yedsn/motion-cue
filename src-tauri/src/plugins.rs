@@ -246,6 +246,7 @@ fn plugin_animation(manifest: &PluginManifest) -> AnimationDefinition {
             volume: 0.6,
             delay_ms: 0,
         },
+        transition: None,
         plugin_id: Some(manifest.id.clone()),
     }
 }

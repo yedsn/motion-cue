@@ -15,6 +15,10 @@ export function validateAnimation(animation: AnimationDefinition): string[] {
   if (animation.durationMs < 100 || animation.durationMs > 60_000) errors.push("持续时间必须在 100 到 60000 毫秒之间");
   if (animation.audio.volume < 0 || animation.audio.volume > 1) errors.push("音量必须在 0 到 1 之间");
   if (animation.audio.delayMs < 0 || animation.audio.delayMs > animation.durationMs) errors.push("音效延迟不能超过动画时长");
+  if (animation.transition) {
+    if (animation.transition.enterMs < 0 || animation.transition.exitMs < 0 || animation.transition.enterMs > 5000 || animation.transition.exitMs > 5000) errors.push("过渡时长必须在 0 到 5000 毫秒之间");
+    if (animation.transition.enterMs + animation.transition.exitMs > animation.durationMs) errors.push("进入和结尾过渡总时长不能超过动画持续时间");
+  }
   if (!animation.colors.length || animation.colors.some((color) => !colorPattern.test(color))) errors.push("颜色必须是六位十六进制值");
   if (animation.text && animation.text.length > 200) errors.push("文字不能超过 200 个字符");
   const particleCount = animation.options.particleCount;
@@ -34,4 +38,3 @@ export function parsePluginHostMessage(value: unknown): PluginHostMessage | null
   if (message.type === "sound" && typeof message.soundId === "string" && message.soundId.length <= 64) return message as PluginHostMessage;
   return null;
 }
-

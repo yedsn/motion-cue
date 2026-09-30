@@ -16,6 +16,24 @@ pub struct AudioConfig {
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "kebab-case")]
+pub enum TransitionKind {
+    None,
+    Fade,
+    Scale,
+    SlideUp,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct MotionTransitionConfig {
+    pub enter: TransitionKind,
+    pub exit: TransitionKind,
+    pub enter_ms: u64,
+    pub exit_ms: u64,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "kebab-case")]
 pub enum AnimationKind {
     Builtin,
     Configured,
@@ -62,6 +80,8 @@ pub struct AnimationDefinition {
     pub options: serde_json::Map<String, serde_json::Value>,
     pub audio: AudioConfig,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub transition: Option<MotionTransitionConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub plugin_id: Option<String>,
 }
 
@@ -76,6 +96,8 @@ pub struct GlobalSettings {
     pub default_duration_ms: u64,
     #[serde(default = "default_volume")]
     pub default_volume: f64,
+    #[serde(default = "default_transition")]
+    pub default_transition: MotionTransitionConfig,
     pub diagnostics_retention: usize,
 }
 
@@ -88,6 +110,15 @@ fn default_volume() -> f64 {
 
 fn default_overlay_topmost() -> bool {
     true
+}
+
+pub fn default_transition() -> MotionTransitionConfig {
+    MotionTransitionConfig {
+        enter: TransitionKind::Fade,
+        exit: TransitionKind::Fade,
+        enter_ms: 180,
+        exit_ms: 420,
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -156,6 +187,7 @@ pub struct PlaybackRequest {
     pub params: BTreeMap<String, String>,
     pub started_at: u64,
     pub play_audio: bool,
+    pub transition: MotionTransitionConfig,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub audio_data_url: Option<String>,
 }

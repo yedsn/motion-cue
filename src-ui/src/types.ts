@@ -3,12 +3,20 @@ export const SCHEMA_VERSION = 1;
 export type AnimationKind = "builtin" | "configured" | "web-plugin";
 export type RendererKind = "confetti" | "badge" | "pulse" | "ring" | "shake" | "completion" | "plugin";
 export type MonitorTarget = "all" | "primary";
+export type TransitionKind = "none" | "fade" | "scale" | "slide-up";
 
 export type AudioConfig = {
   enabled: boolean;
   resourceId?: string;
   volume: number;
   delayMs: number;
+};
+
+export type MotionTransitionConfig = {
+  enter: TransitionKind;
+  exit: TransitionKind;
+  enterMs: number;
+  exitMs: number;
 };
 
 export type AnimationDefinition = {
@@ -26,6 +34,7 @@ export type AnimationDefinition = {
   colors: string[];
   options: Record<string, unknown>;
   audio: AudioConfig;
+  transition?: MotionTransitionConfig;
   pluginId?: string;
 };
 
@@ -35,6 +44,7 @@ export type GlobalSettings = {
   defaultTarget: MonitorTarget;
   defaultDurationMs: number;
   defaultVolume: number;
+  defaultTransition: MotionTransitionConfig;
   diagnosticsRetention: number;
 };
 
@@ -85,6 +95,7 @@ export type PlaybackRequest = {
   params: Record<string, string>;
   startedAt: number;
   playAudio: boolean;
+  transition: MotionTransitionConfig;
   audioDataUrl?: string;
 };
 

@@ -121,6 +121,10 @@ impl PlaybackCoordinator {
             params,
             started_at,
             play_audio: animation.audio.enabled && !config.settings.muted,
+            transition: animation
+                .transition
+                .clone()
+                .unwrap_or_else(|| config.settings.default_transition.clone()),
             audio_data_url,
         };
         let audio_owner_label = labels.first().cloned().unwrap_or_default();
@@ -617,6 +621,13 @@ fn apply_overrides(
         }
         animation.duration_ms = duration;
     }
+    if let Some(transition) = &animation.transition {
+        crate::catalog::validate_transition(
+            transition.enter_ms,
+            transition.exit_ms,
+            animation.duration_ms,
+        )?;
+    }
     Ok(())
 }
 
@@ -791,6 +802,7 @@ mod tests {
             params: BTreeMap::new(),
             started_at: 1,
             play_audio: true,
+            transition: crate::models::default_transition(),
             audio_data_url: Some("data:audio/wav;base64,AA==".into()),
         };
         let mut secondary = owner.clone();

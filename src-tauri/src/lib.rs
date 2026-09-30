@@ -231,38 +231,41 @@ fn setup_tray(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let quit = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&open, &stop, &mute, &quit])?;
     let tray = TrayIconBuilder::with_id("motioncue")
-        .icon(app.default_window_icon().cloned().ok_or("默认窗口图标不可用")?)
+        .icon(
+            app.default_window_icon()
+                .cloned()
+                .ok_or("默认窗口图标不可用")?,
+        )
         .menu(&menu)
         .tooltip("MotionCue");
-    tray
-        .on_menu_event(|app, event| match event.id.as_ref() {
-            "open" => {
-                let _ = app_open(app.clone());
-            }
-            "stop" => {
-                let _ = animation_stop_all(app.clone());
-            }
-            "mute" => {
-                let current = app.state::<AppState>().config.get();
-                let _ = settings_update(
-                    app.clone(),
-                    models::GlobalSettings {
-                        muted: !current.settings.muted,
-                        ..current.settings
-                    },
-                );
-            }
-            "quit" => {
-                let _ = app.exit(0);
-            }
-            _ => {}
-        })
-        .on_tray_icon_event(|tray, event| {
-            if matches!(event, TrayIconEvent::DoubleClick { .. }) {
-                let _ = app_open(tray.app_handle().clone());
-            }
-        })
-        .build(app)?;
+    tray.on_menu_event(|app, event| match event.id.as_ref() {
+        "open" => {
+            let _ = app_open(app.clone());
+        }
+        "stop" => {
+            let _ = animation_stop_all(app.clone());
+        }
+        "mute" => {
+            let current = app.state::<AppState>().config.get();
+            let _ = settings_update(
+                app.clone(),
+                models::GlobalSettings {
+                    muted: !current.settings.muted,
+                    ..current.settings
+                },
+            );
+        }
+        "quit" => {
+            let _ = app.exit(0);
+        }
+        _ => {}
+    })
+    .on_tray_icon_event(|tray, event| {
+        if matches!(event, TrayIconEvent::DoubleClick { .. }) {
+            let _ = app_open(tray.app_handle().clone());
+        }
+    })
+    .build(app)?;
     Ok(())
 }
 

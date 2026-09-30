@@ -1,8 +1,8 @@
 use std::collections::{BTreeMap, HashMap};
 
 use crate::models::{
-    AnimationDefinition, AnimationKind, AppConfig, AudioConfig, MonitorTarget, RendererKind,
-    SCHEMA_VERSION,
+    default_transition, AnimationDefinition, AnimationKind, AppConfig, AudioConfig, MonitorTarget,
+    RendererKind, SCHEMA_VERSION,
 };
 
 pub fn default_config() -> AppConfig {
@@ -14,6 +14,7 @@ pub fn default_config() -> AppConfig {
             default_target: MonitorTarget::All,
             default_duration_ms: 3000,
             default_volume: 0.6,
+            default_transition: default_transition(),
             diagnostics_retention: 200,
         },
         animations: builtins(),
@@ -31,7 +32,7 @@ pub fn builtins() -> Vec<AnimationDefinition> {
             RendererKind::Confetti,
             3200,
             vec!["#d9ff9f", "#91f5d4", "#ffd27a", "#8bb8ff"],
-            false,
+            None,
         ),
         animation(
             "task-complete",
@@ -41,7 +42,7 @@ pub fn builtins() -> Vec<AnimationDefinition> {
             RendererKind::Completion,
             3600,
             vec!["#d9ff9f", "#91f5d4", "#ffd27a", "#f8fff1", "#8bb8ff"],
-            true,
+            Some("builtin/completion-success.wav"),
         ),
         animation(
             "success",
@@ -51,7 +52,7 @@ pub fn builtins() -> Vec<AnimationDefinition> {
             RendererKind::Badge,
             2200,
             vec!["#34c584", "#c9ef8f"],
-            true,
+            Some("builtin/soft-chime.wav"),
         ),
         animation(
             "milestone",
@@ -61,7 +62,7 @@ pub fn builtins() -> Vec<AnimationDefinition> {
             RendererKind::Ring,
             4200,
             vec!["#ffd27a", "#ff8e72", "#d9ff9f"],
-            true,
+            Some("builtin/bright-pop.wav"),
         ),
         animation(
             "focus-start",
@@ -71,7 +72,7 @@ pub fn builtins() -> Vec<AnimationDefinition> {
             RendererKind::Pulse,
             1800,
             vec!["#8bb8ff", "#91f5d4"],
-            false,
+            None,
         ),
         animation(
             "error",
@@ -81,7 +82,7 @@ pub fn builtins() -> Vec<AnimationDefinition> {
             RendererKind::Shake,
             1800,
             vec!["#f06b61", "#ffb4ad"],
-            false,
+            None,
         ),
         animation(
             "silent-confetti",
@@ -91,7 +92,7 @@ pub fn builtins() -> Vec<AnimationDefinition> {
             RendererKind::Confetti,
             3000,
             vec!["#d9ff9f", "#91f5d4", "#ffd27a"],
-            false,
+            None,
         ),
     ]
 }
@@ -104,7 +105,7 @@ fn animation(
     renderer: RendererKind,
     duration_ms: u64,
     colors: Vec<&str>,
-    sound: bool,
+    sound: Option<&str>,
 ) -> AnimationDefinition {
     let mut options = serde_json::Map::new();
     options.insert("particleCount".into(), serde_json::json!(120));
@@ -123,11 +124,12 @@ fn animation(
         colors: colors.into_iter().map(String::from).collect(),
         options,
         audio: AudioConfig {
-            enabled: sound,
-            resource_id: sound.then(|| "builtin/completion-success.wav".into()),
+            enabled: sound.is_some(),
+            resource_id: sound.map(str::to_string),
             volume: 0.62,
             delay_ms: 0,
         },
+        transition: None,
         plugin_id: None,
     }
 }
@@ -159,6 +161,13 @@ pub fn validate_animation(animation: &AnimationDefinition) -> Result<(), String>
     {
         return Err("音效配置超出安全范围".into());
     }
+    if let Some(transition) = &animation.transition {
+        validate_transition(
+            transition.enter_ms,
+            transition.exit_ms,
+            animation.duration_ms,
+        )?;
+    }
     if animation.colors.is_empty() || animation.colors.iter().any(|color| !valid_color(color)) {
         return Err("动画颜色无效".into());
     }
@@ -187,6 +196,13 @@ pub fn validate_animation(animation: &AnimationDefinition) -> Result<(), String>
         if !(0.0..=180.0).contains(&angle) {
             return Err("喷发方向必须在 0 到 180 度之间".into());
         }
+    }
+    Ok(())
+}
+
+pub fn validate_transition(enter_ms: u64, exit_ms: u64, duration_ms: u64) -> Result<(), String> {
+    if enter_ms > 5_000 || exit_ms > 5_000 || enter_ms.saturating_add(exit_ms) > duration_ms {
+        return Err("过渡时间必须不超过 5000 毫秒，且进入与结尾过渡总时长不能超过动画时长".into());
     }
     Ok(())
 }
