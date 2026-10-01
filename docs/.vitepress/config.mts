@@ -13,7 +13,7 @@ export default defineConfig({
   lastUpdated: true,
   head: [
     ["link", { rel: "icon", type: "image/svg+xml", href: `${base}logo.svg` }],
-    ["meta", { name: "theme-color", content: "#ef6c46" }],
+    ["meta", { name: "theme-color", content: "#121915" }],
     ["meta", { property: "og:type", content: "website" }],
     ["meta", { property: "og:title", content: "MotionCue" }],
     ["meta", { property: "og:description", content: "用动画和音效为开发工作流提供即时反馈。" }],
