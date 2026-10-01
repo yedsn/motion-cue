@@ -221,15 +221,51 @@ function formatBytes(value?: number) {
   return `${(value / 1024 / 1024).toFixed(1)} MB`;
 }
 
+function formatUpdateDate(value?: string) {
+  if (!value) return "未知";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString("zh-CN");
+}
+
+function buildUpdateMessage(result: AppUpdateCheckResult) {
+  const update = result.update;
+  const lines = [
+    `当前版本：${update?.currentVersion || result.currentVersion || "未知"}`,
+    `最新版本：${update?.version || "未知"}`,
+    `发布时间：${formatUpdateDate(update?.pubDate)}`,
+  ];
+  const notes = update?.notes?.trim();
+  lines.push("", notes ? `更新说明：\n${notes}` : "更新说明：暂无");
+  return lines.join("\n");
+}
+
 async function checkForUpdates() {
-  if (updateChecking.value || updateInstalling.value) return;
+  if (updateChecking.value || updateInstalling.value) {
+    const busyMessage = updateInstalling.value ? "更新正在安装，请稍候再试。" : "当前正在检查更新，请稍候再试。";
+    updateMessage.value = busyMessage;
+    window.alert(busyMessage);
+    return;
+  }
   updateChecking.value = true;
   updateMessage.value = "正在检查更新";
   try {
     updateInfo.value = await checkAppUpdate();
-    updateMessage.value = updateInfo.value.available ? `发现新版本 ${updateInfo.value.update?.version}` : "当前已是最新版本";
+    if (!updateInfo.value.available) {
+      updateMessage.value = `当前已是最新版本（${updateInfo.value.currentVersion || "未知版本"}）`;
+      window.alert(updateMessage.value);
+      return;
+    }
+
+    updateMessage.value = `发现新版本 ${updateInfo.value.update?.version}`;
+    const confirmed = window.confirm(`${buildUpdateMessage(updateInfo.value)}\n\n是否立即下载并安装？`);
+    if (!confirmed) {
+      updateMessage.value = `已跳过本次更新：${updateInfo.value.update?.version || ""}`.trim();
+      return;
+    }
+    await installUpdate();
   } catch (error) {
     updateMessage.value = String(error);
+    window.alert(`检查更新失败：${String(error)}`);
   } finally {
     updateChecking.value = false;
   }
@@ -244,6 +280,7 @@ async function installUpdate() {
     await downloadAndInstallUpdate();
   } catch (error) {
     updateMessage.value = String(error);
+    window.alert(`安装更新失败：${String(error)}`);
     updateInstalling.value = false;
   }
 }
@@ -261,8 +298,13 @@ onMounted(async () => {
     if (payload.stage === "installed") {
       updateProgress.value = 100;
       updateInstalling.value = false;
+      updateMessage.value = "更新已安装完成";
+      if (window.confirm("更新已安装完成，是否立即重启应用？")) void restartApp();
     }
-    if (payload.stage === "failed") updateInstalling.value = false;
+    if (payload.stage === "failed") {
+      updateInstalling.value = false;
+      updateMessage.value = payload.message || "安装更新失败";
+    }
   });
   stopUpdateCheckRequests = await onAppUpdateCheckRequest(() => {
     page.value = "settings";
