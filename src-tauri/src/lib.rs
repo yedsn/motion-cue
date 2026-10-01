@@ -3,13 +3,13 @@ use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::sync::Arc;
 
-use base64::Engine;
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_deep_link::DeepLinkExt;
 
 mod catalog;
+mod audio;
 mod diagnostics;
 mod invocation;
 mod models;
@@ -751,26 +751,7 @@ fn audio_import(app: AppHandle, path: String) -> Result<String, String> {
 
 #[tauri::command]
 fn audio_resource(app: AppHandle, resource_id: String) -> Result<String, String> {
-    if !resource_id.starts_with("audio/")
-        || resource_id.contains("..")
-        || resource_id.contains('\\')
-        || PathBuf::from(&resource_id).is_absolute()
-    {
-        return Err("仅支持试听已导入的外置音效".into());
-    }
-    let path = app
-        .path()
-        .app_data_dir()
-        .map_err(|error| error.to_string())?
-        .join("resources")
-        .join(&resource_id);
-    let data = std::fs::read(&path).map_err(|error| format!("读取外置音效失败: {error}"))?;
-    let mime = mime_guess::from_path(&path).first_or_octet_stream();
-    Ok(format!(
-        "data:{};base64,{}",
-        mime,
-        base64::engine::general_purpose::STANDARD.encode(data)
-    ))
+    audio::resource_data_url(&app, &resource_id)
 }
 
 #[tauri::command]

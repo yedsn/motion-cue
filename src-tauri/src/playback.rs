@@ -1,8 +1,6 @@
 use std::collections::{BTreeMap, HashMap};
-use std::fs;
 use std::sync::Mutex;
 
-use base64::Engine;
 use tauri::{
     AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, WebviewUrl, WebviewWindow,
     WebviewWindowBuilder,
@@ -633,22 +631,7 @@ fn apply_overrides(
 }
 
 fn load_audio_data_url(app: &AppHandle, resource_id: &str) -> Option<String> {
-    if resource_id.starts_with("builtin/") {
-        return None;
-    }
-    let path = app
-        .path()
-        .app_data_dir()
-        .ok()?
-        .join("resources")
-        .join(resource_id);
-    let data = fs::read(&path).ok()?;
-    let mime = mime_guess::from_path(&path).first_or_octet_stream();
-    Some(format!(
-        "data:{};base64,{}",
-        mime,
-        base64::engine::general_purpose::STANDARD.encode(data)
-    ))
+    crate::audio::resource_data_url(app, resource_id).ok()
 }
 
 #[cfg(test)]

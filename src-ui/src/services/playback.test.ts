@@ -18,6 +18,7 @@ const request: PlaybackRequest = {
 
 describe("audio scheduling", () => {
   it("uses one built-in audio source with configured delay", () => expect(audioSchedule(request)).toEqual({ shouldPlay: true, source: "/audio/completion-success.wav", delayMs: 120, volume: 0.7 }));
+  it("prefers host-provided data URLs for packaged playback", () => expect(audioSchedule({ ...request, audioDataUrl: "data:audio/wav;base64,AA==" }).source).toBe("data:audio/wav;base64,AA=="));
   it("maps any built-in audio resource to packaged audio", () => expect(audioSchedule({ ...request, animation: { ...request.animation, audio: { ...request.animation.audio, resourceId: "builtin/soft-chime.wav" } } }).source).toBe("/audio/soft-chime.wav"));
   it("honors host mute decision", () => expect(audioSchedule({ ...request, playAudio: false }).shouldPlay).toBe(false));
 });

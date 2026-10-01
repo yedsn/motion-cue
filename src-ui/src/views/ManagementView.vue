@@ -180,7 +180,7 @@ function useBuiltinAudio(resourceId: string) {
 async function previewSelectedAudio(resourceId = draft.audio.resourceId) {
   if (!resourceId) return;
   try {
-    const source = resourceId.startsWith("builtin/") ? `/audio/${resourceId.slice("builtin/".length)}` : await getAudioResource(resourceId);
+    const source = await getAudioResource(resourceId);
     const audio = new Audio(source);
     audio.volume = draft.audio.volume;
     await audio.play();
