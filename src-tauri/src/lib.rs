@@ -313,10 +313,11 @@ fn run(initial_intent: LaunchIntent) -> Result<(), String> {
 
 fn setup_tray(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let open = MenuItem::with_id(app, "open", "打开 MotionCue", true, None::<&str>)?;
+    let check_update = MenuItem::with_id(app, "check_update", "检查更新", true, None::<&str>)?;
     let stop = MenuItem::with_id(app, "stop", "停止全部动画", true, None::<&str>)?;
     let mute = MenuItem::with_id(app, "mute", "切换全局静音", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&open, &stop, &mute, &quit])?;
+    let menu = Menu::with_items(app, &[&open, &check_update, &stop, &mute, &quit])?;
     let tray = TrayIconBuilder::with_id("motioncue")
         .icon(
             app.default_window_icon()
@@ -328,6 +329,10 @@ fn setup_tray(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     tray.on_menu_event(|app, event| match event.id.as_ref() {
         "open" => {
             let _ = app_open(app.clone());
+        }
+        "check_update" => {
+            let _ = app_open(app.clone());
+            let _ = app.emit("motioncue://check-update", serde_json::json!({}));
         }
         "stop" => {
             let _ = animation_stop_all(app.clone());

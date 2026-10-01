@@ -3,7 +3,7 @@ import { computed, onMounted, onUnmounted, reactive, ref } from "vue";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Activity, Ban, Box, ChevronRight, CirclePlay, Download, Minus, PackagePlus, Plus, RotateCcw, Save, Settings2, Sparkles, Square, Trash2, Upload, X } from "lucide-vue-next";
-import { checkAppUpdate, deleteAnimation, downloadAndInstallUpdate, exportAnimation, getAppVersion, getAudioResource, getConfig, getDiagnostics, importAnimation, importAudio, installPlugin, onAppUpdateEvent, previewAnimation, resetAnimation, restartApp, saveAnimation, setPluginEnabled, stopAnimations, uninstallPlugin, updateSettings } from "../services/tauri";
+import { checkAppUpdate, deleteAnimation, downloadAndInstallUpdate, exportAnimation, getAppVersion, getAudioResource, getConfig, getDiagnostics, importAnimation, importAudio, installPlugin, onAppUpdateCheckRequest, onAppUpdateEvent, previewAnimation, resetAnimation, restartApp, saveAnimation, setPluginEnabled, stopAnimations, uninstallPlugin, updateSettings } from "../services/tauri";
 import { validateAnimation } from "../services/schemas";
 import type { AnimationDefinition, AppConfig, AppUpdateCheckResult, DiagnosticEntry } from "../types";
 
@@ -37,6 +37,7 @@ const updateProgress = ref(0);
 const draft = reactive<AnimationDefinition>(emptyAnimation());
 const currentWindow = getCurrentWindow();
 let stopUpdateEvents: (() => void) | undefined;
+let stopUpdateCheckRequests: (() => void) | undefined;
 
 const selected = computed(() => config.value?.animations.find((animation) => animation.id === selectedId.value));
 const plugins = computed(() => config.value?.plugins ?? []);
@@ -263,9 +264,16 @@ onMounted(async () => {
     }
     if (payload.stage === "failed") updateInstalling.value = false;
   });
+  stopUpdateCheckRequests = await onAppUpdateCheckRequest(() => {
+    page.value = "settings";
+    void checkForUpdates();
+  });
 });
 
-onUnmounted(() => stopUpdateEvents?.());
+onUnmounted(() => {
+  stopUpdateEvents?.();
+  stopUpdateCheckRequests?.();
+});
 </script>
 
 <template>

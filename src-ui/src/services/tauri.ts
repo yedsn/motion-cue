@@ -41,3 +41,7 @@ export function onPlaybackStop(callback: (sessionId?: string) => void): Promise<
 export function onAppUpdateEvent(callback: (payload: AppUpdateEventPayload) => void): Promise<UnlistenFn> {
   return listen<AppUpdateEventPayload>("app-update-event", (event) => callback(event.payload));
 }
+
+export function onAppUpdateCheckRequest(callback: () => void): Promise<UnlistenFn> {
+  return listen("motioncue://check-update", callback);
+}
