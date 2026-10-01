@@ -1,3 +1,5 @@
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
 fn main() {
     hide_console_for_desktop_launch();
     motion_cue_lib::entry();
