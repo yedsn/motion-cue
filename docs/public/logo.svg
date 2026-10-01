@@ -1,5 +1,12 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" role="img" aria-label="MotionCue">
-  <rect width="96" height="96" rx="22" fill="#171717"/>
-  <path d="M24 30h12l12 18 12-18h12v36H60V48L48 66 36 48v18H24z" fill="#ef6c46"/>
-  <circle cx="76" cy="24" r="6" fill="#ffd166"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="MotionCue">
+  <defs>
+    <linearGradient id="star" x1="136" y1="224" x2="376" y2="312" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#c9ef8f"/>
+      <stop offset="1" stop-color="#91f5d4"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="96" fill="#121915"/>
+  <path d="M256 138L286 222L376 222L304 276L328 362L256 312L184 362L208 276L136 222L226 222L256 138Z" fill="none" stroke="url(#star)" stroke-width="26" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M256 88V62M256 450V426M88 256H62M450 256H426" fill="none" stroke="#f4fbf5" stroke-width="17" stroke-linecap="round" opacity="0.88"/>
+  <path d="M138 138L118 118M374 138L394 118M138 374L118 394M374 374L394 394" fill="none" stroke="#dff7ba" stroke-width="15" stroke-linecap="round" opacity="0.9"/>
 </svg>
