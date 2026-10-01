@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from "vue";
+import { computed, onMounted, onUnmounted, reactive, ref } from "vue";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Activity, Ban, Box, ChevronRight, CirclePlay, Download, Minus, PackagePlus, Plus, RotateCcw, Save, Settings2, Sparkles, Square, Trash2, Upload, X } from "lucide-vue-next";
-import { deleteAnimation, exportAnimation, getAudioResource, getConfig, getDiagnostics, importAnimation, importAudio, installPlugin, previewAnimation, resetAnimation, saveAnimation, setPluginEnabled, stopAnimations, uninstallPlugin, updateSettings } from "../services/tauri";
+import { checkAppUpdate, deleteAnimation, downloadAndInstallUpdate, exportAnimation, getAppVersion, getAudioResource, getConfig, getDiagnostics, importAnimation, importAudio, installPlugin, onAppUpdateEvent, previewAnimation, resetAnimation, restartApp, saveAnimation, setPluginEnabled, stopAnimations, uninstallPlugin, updateSettings } from "../services/tauri";
 import { validateAnimation } from "../services/schemas";
-import type { AnimationDefinition, AppConfig, DiagnosticEntry } from "../types";
+import type { AnimationDefinition, AppConfig, AppUpdateCheckResult, DiagnosticEntry } from "../types";
 
 const builtinAudioOptions = [
   { id: "builtin/completion-success.wav", name: "完成提示" },
@@ -28,8 +28,15 @@ const page = ref<"animations" | "plugins" | "settings" | "diagnostics">("animati
 const message = ref("");
 const previewing = ref(false);
 const externalAudioSelected = ref(false);
+const appVersion = ref("");
+const updateChecking = ref(false);
+const updateInstalling = ref(false);
+const updateInfo = ref<AppUpdateCheckResult>();
+const updateMessage = ref("");
+const updateProgress = ref(0);
 const draft = reactive<AnimationDefinition>(emptyAnimation());
 const currentWindow = getCurrentWindow();
+let stopUpdateEvents: (() => void) | undefined;
 
 const selected = computed(() => config.value?.animations.find((animation) => animation.id === selectedId.value));
 const plugins = computed(() => config.value?.plugins ?? []);
@@ -206,7 +213,59 @@ async function saveSettings() {
 
 async function loadDiagnostics() { diagnostics.value = await getDiagnostics(); }
 
-onMounted(async () => { await reload(); await loadDiagnostics(); });
+function formatBytes(value?: number) {
+  if (!value) return "0 B";
+  if (value < 1024) return `${value} B`;
+  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
+  return `${(value / 1024 / 1024).toFixed(1)} MB`;
+}
+
+async function checkForUpdates() {
+  if (updateChecking.value || updateInstalling.value) return;
+  updateChecking.value = true;
+  updateMessage.value = "正在检查更新";
+  try {
+    updateInfo.value = await checkAppUpdate();
+    updateMessage.value = updateInfo.value.available ? `发现新版本 ${updateInfo.value.update?.version}` : "当前已是最新版本";
+  } catch (error) {
+    updateMessage.value = String(error);
+  } finally {
+    updateChecking.value = false;
+  }
+}
+
+async function installUpdate() {
+  if (updateInstalling.value) return;
+  updateInstalling.value = true;
+  updateProgress.value = 0;
+  updateMessage.value = "准备下载更新";
+  try {
+    await downloadAndInstallUpdate();
+  } catch (error) {
+    updateMessage.value = String(error);
+    updateInstalling.value = false;
+  }
+}
+
+onMounted(async () => {
+  await reload();
+  await loadDiagnostics();
+  appVersion.value = await getAppVersion().catch(() => "");
+  stopUpdateEvents = await onAppUpdateEvent((payload) => {
+    if (payload.message) updateMessage.value = payload.message;
+    if (payload.stage === "download_progress" && payload.contentLength && payload.downloadedBytes !== undefined) {
+      updateProgress.value = Math.min(100, Math.round((payload.downloadedBytes / payload.contentLength) * 100));
+      updateMessage.value = `正在下载更新：${formatBytes(payload.downloadedBytes)} / ${formatBytes(payload.contentLength)}`;
+    }
+    if (payload.stage === "installed") {
+      updateProgress.value = 100;
+      updateInstalling.value = false;
+    }
+    if (payload.stage === "failed") updateInstalling.value = false;
+  });
+});
+
+onUnmounted(() => stopUpdateEvents?.());
 </script>
 
 <template>
@@ -267,7 +326,32 @@ onMounted(async () => { await reload(); await loadDiagnostics(); });
 
     <section v-else-if="page === 'plugins' && config" class="workspace"><header class="workspace-header"><div><small>PLUGINS</small><h1>沙箱 Web 插件</h1><p>插件只能渲染本地动画，不能访问网络、文件或系统能力。</p></div><button class="primary" @click="install"><PackagePlus :size="14" />安装插件包</button></header><div class="plugin-grid"><article v-for="plugin in plugins" :key="plugin.manifest.id" class="plugin-card"><header><span><Box :size="20" /></span><div><strong>{{ plugin.manifest.name }}</strong><small>{{ plugin.manifest.id }} · {{ plugin.manifest.version }}</small></div></header><p>{{ plugin.source }}</p><small>{{ (plugin.sizeBytes / 1024).toFixed(1) }} KB</small><p v-if="plugin.lastError" class="plugin-error">最近错误：{{ plugin.lastError }}</p><div class="chips"><em v-if="plugin.manifest.capabilities.webgl">WebGL</em><em v-if="plugin.manifest.capabilities.worker">Worker</em><em>离线资源</em></div><footer><label class="switch"><input :checked="plugin.enabled" type="checkbox" @change="setPluginEnabled(plugin.manifest.id, ($event.target as HTMLInputElement).checked).then(value => config = value)" />启用</label><button type="button" :disabled="!plugin.enabled || previewing" @click="previewPlugin(plugin.manifest.id)"><CirclePlay :size="14" />{{ previewing ? '预览中' : '预览' }}</button><button class="danger" @click="uninstallPlugin(plugin.manifest.id).then(value => config = value)"><Trash2 :size="14" />卸载</button></footer></article><div v-if="!plugins.length" class="empty"><Ban :size="34" /><strong>尚未安装插件</strong><p>安装后的插件默认禁用，需要明确确认后才能调用。</p></div></div></section>
 
-    <section v-else-if="page === 'settings' && config" class="workspace narrow"><header class="workspace-header"><div><small>SETTINGS</small><h1>全局设置</h1><p>设备级偏好不会修改单个动画定义。</p></div></header><div class="settings-card"><label class="switch large"><input v-model="config.settings.muted" type="checkbox" /><span><strong>全局静音</strong><small>保留所有视觉动画，但不创建可听音频输出。</small></span></label><label class="switch large"><input v-model="config.settings.overlayTopmost" type="checkbox" /><span><strong>动画显示在最顶层</strong><small>关闭后，动画仍鼠标穿透且不抢焦点，但可被其他应用窗口盖住。</small></span></label><label>默认目标<select v-model="config.settings.defaultTarget"><option value="all">全部显示器</option><option value="primary">主显示器</option></select></label><label>动画目标帧率<select v-model.number="config.settings.targetFrameRate"><option v-for="frameRate in frameRateOptions" :key="frameRate" :value="frameRate">{{ frameRate }} FPS</option></select><small class="field-help">默认 60 FPS。浏览器会根据显示器刷新率和系统性能实际调度帧率。</small></label><label>新动画默认时长<input v-model.number="config.settings.defaultDurationMs" type="number" min="100" max="60000" /></label><label>新动画默认音量<input v-model.number="config.settings.defaultVolume" type="range" min="0" max="1" step="0.05" /></label><div class="settings-section"><strong>默认动画过渡</strong><small>没有单独覆盖的动画会使用以下开始和结尾效果。</small><div class="form-grid"><label>开始效果<select v-model="config.settings.defaultTransition.enter"><option v-for="option in transitionOptions" :key="option.value" :value="option.value">{{ option.label }}</option></select></label><label>结尾效果<select v-model="config.settings.defaultTransition.exit"><option v-for="option in transitionOptions" :key="option.value" :value="option.value">{{ option.label }}</option></select></label><label>开始过渡（毫秒）<input v-model.number="config.settings.defaultTransition.enterMs" type="number" min="0" max="5000" /></label><label>结尾过渡（毫秒）<input v-model.number="config.settings.defaultTransition.exitMs" type="number" min="0" max="5000" /></label></div></div><label>诊断记录保留数量<input v-model.number="config.settings.diagnosticsRetention" type="number" min="10" max="2000" /></label><button class="primary" @click="saveSettings"><Save :size="14" />保存设置</button></div></section>
+    <section v-else-if="page === 'settings' && config" class="workspace narrow">
+      <header class="workspace-header"><div><small>SETTINGS</small><h1>全局设置</h1><p>设备级偏好不会修改单个动画定义。</p></div></header>
+      <div class="settings-card">
+        <label class="switch large"><input v-model="config.settings.muted" type="checkbox" /><span><strong>全局静音</strong><small>保留所有视觉动画，但不创建可听音频输出。</small></span></label>
+        <label class="switch large"><input v-model="config.settings.overlayTopmost" type="checkbox" /><span><strong>动画显示在最顶层</strong><small>关闭后，动画仍鼠标穿透且不抢焦点，但可被其他应用窗口盖住。</small></span></label>
+        <label>默认目标<select v-model="config.settings.defaultTarget"><option value="all">全部显示器</option><option value="primary">主显示器</option></select></label>
+        <label>动画目标帧率<select v-model.number="config.settings.targetFrameRate"><option v-for="frameRate in frameRateOptions" :key="frameRate" :value="frameRate">{{ frameRate }} FPS</option></select><small class="field-help">默认 60 FPS。浏览器会根据显示器刷新率和系统性能实际调度帧率。</small></label>
+        <label>新动画默认时长<input v-model.number="config.settings.defaultDurationMs" type="number" min="100" max="60000" /></label>
+        <label>新动画默认音量<input v-model.number="config.settings.defaultVolume" type="range" min="0" max="1" step="0.05" /></label>
+        <div class="settings-section"><strong>默认动画过渡</strong><small>没有单独覆盖的动画会使用以下开始和结尾效果。</small><div class="form-grid"><label>开始效果<select v-model="config.settings.defaultTransition.enter"><option v-for="option in transitionOptions" :key="option.value" :value="option.value">{{ option.label }}</option></select></label><label>结尾效果<select v-model="config.settings.defaultTransition.exit"><option v-for="option in transitionOptions" :key="option.value" :value="option.value">{{ option.label }}</option></select></label><label>开始过渡（毫秒）<input v-model.number="config.settings.defaultTransition.enterMs" type="number" min="0" max="5000" /></label><label>结尾过渡（毫秒）<input v-model.number="config.settings.defaultTransition.exitMs" type="number" min="0" max="5000" /></label></div></div>
+        <label>诊断记录保留数量<input v-model.number="config.settings.diagnosticsRetention" type="number" min="10" max="2000" /></label>
+        <div class="settings-section update-section">
+          <strong>应用更新</strong>
+          <small>当前版本 {{ appVersion || '未知' }}</small>
+          <p v-if="updateMessage" class="update-status">{{ updateMessage }}</p>
+          <progress v-if="updateInstalling" :value="updateProgress" max="100"></progress>
+          <small v-if="updateInfo?.available && updateInfo.update">新版本 {{ updateInfo.update.version }} · {{ updateInfo.update.target }}</small>
+          <div class="update-actions">
+            <button type="button" :disabled="updateChecking || updateInstalling" @click="checkForUpdates"><RotateCcw :size="14" />{{ updateChecking ? '检查中' : '检查更新' }}</button>
+            <button v-if="updateInfo?.available" class="primary" type="button" :disabled="updateInstalling" @click="installUpdate"><Download :size="14" />{{ updateInstalling ? '安装中' : '下载并安装' }}</button>
+            <button v-if="updateProgress === 100" type="button" @click="restartApp"><RotateCcw :size="14" />重启应用</button>
+          </div>
+        </div>
+        <button class="primary" @click="saveSettings"><Save :size="14" />保存设置</button>
+      </div>
+    </section>
 
     <section v-else class="workspace"><header class="workspace-header"><div><small>DIAGNOSTICS</small><h1>诊断记录</h1><p>默认不保存完整外部文字参数。</p></div><button @click="loadDiagnostics"><RotateCcw :size="14" />刷新</button></header><div class="diagnostic-list"><article v-for="entry in diagnostics" :key="entry.id" :class="entry.level"><time>{{ new Date(entry.timestamp).toLocaleString() }}</time><strong>{{ entry.category }}</strong><span>{{ entry.message }}</span><code v-if="entry.command">{{ entry.command }}</code></article><div v-if="!diagnostics.length" class="empty"><Activity :size="34" /><strong>暂无诊断记录</strong></div></div></section>
     <div v-if="message" class="toast" @animationend="message = ''">{{ message }}</div>

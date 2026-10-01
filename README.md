@@ -219,7 +219,7 @@ MotionCue 支持使用 Web 插件扩展动画能力。
 - ✅ 支持 URL Scheme 与命令行接入
 - ✅ 内置动画和受限 Web 插件模型
 - ✅ GitHub Pages 文档站与 GitHub Releases 发布流程
-- ⚠️ 当前尚未启用 Tauri updater
+- ✅ Tauri updater 发布配置与应用内手动更新入口
 
 问题反馈和改进建议可以提交到 [GitHub Issues](https://github.com/yedsn/motion-cue/issues)。
 

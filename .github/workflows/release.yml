@@ -73,6 +73,34 @@ jobs:
           if ($tauri.version -ne $version) { throw "tauri.conf.json version $($tauri.version) does not match tag $tag." }
           if ($cargoVersion -ne $version) { throw "Cargo.toml version $cargoVersion does not match tag $tag." }
 
+      - name: Validate updater configuration
+        shell: pwsh
+        run: |
+          $tauri = Get-Content src-tauri/tauri.conf.json -Raw -Encoding UTF8 | ConvertFrom-Json
+          $updater = $tauri.plugins.updater
+          if (-not $tauri.bundle.createUpdaterArtifacts) {
+            throw 'src-tauri/tauri.conf.json bundle.createUpdaterArtifacts must be true for updater releases.'
+          }
+          if (-not $updater.pubkey -or $updater.pubkey -eq 'REPLACE_WITH_TAURI_UPDATER_PUBLIC_KEY') {
+            throw 'src-tauri/tauri.conf.json plugins.updater.pubkey is still a placeholder.'
+          }
+          if (-not $updater.endpoints -or $updater.endpoints.Count -eq 0) {
+            throw 'src-tauri/tauri.conf.json plugins.updater.endpoints is empty.'
+          }
+          foreach ($endpoint in $updater.endpoints) {
+            if ($endpoint -notmatch '^https://') { throw "Updater endpoint must use HTTPS: $endpoint" }
+            if ($endpoint -match 'OWNER/REPO') { throw "Updater endpoint still contains placeholder values: $endpoint" }
+          }
+
+      - name: Validate updater signing secrets
+        shell: pwsh
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          if (-not $env:TAURI_SIGNING_PRIVATE_KEY) { throw 'Missing repository secret TAURI_SIGNING_PRIVATE_KEY.' }
+          if (-not $env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD) { throw 'Missing repository secret TAURI_SIGNING_PRIVATE_KEY_PASSWORD.' }
+
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
 
@@ -99,6 +127,8 @@ jobs:
         uses: tauri-apps/tauri-action@v0.6.2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: ${{ github.ref_name }}
           releaseName: MotionCue ${{ github.ref_name }}
@@ -107,6 +137,7 @@ jobs:
 
             - Includes the Windows NSIS installer.
             - Includes macOS Apple Silicon and Intel DMG packages.
+            - Includes `latest.json` for the Tauri desktop auto-update flow.
             - Built from the tagged source with Tauri.
 
             ### macOS 用户注意事项
@@ -118,6 +149,8 @@ jobs:
             ```
           releaseDraft: false
           prerelease: false
+          includeUpdaterJson: true
+          updaterJsonPreferNsis: true
           includeDebug: false
           args: ${{ matrix.args }}
 

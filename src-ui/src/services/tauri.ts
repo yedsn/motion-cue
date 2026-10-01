@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import type { AppConfig, AnimationDefinition, DiagnosticEntry, PlaybackRequest, PluginRecord, PluginRuntime } from "../types";
+import type { AppConfig, AnimationDefinition, AppUpdateCheckResult, AppUpdateEventPayload, DiagnosticEntry, PlaybackRequest, PluginRecord, PluginRuntime } from "../types";
 
 export const getConfig = () => invoke<AppConfig>("config_get");
 export const saveAnimation = (animation: AnimationDefinition) => invoke<AppConfig>("animation_save", { animation });
@@ -25,6 +25,10 @@ export const recordDiagnostic = (level: string, category: string, message: strin
 export const getPlugins = () => invoke<PluginRecord[]>("plugins_get");
 export const reportPlaybackComplete = (sessionId: string) => invoke<void>("playback_complete", { sessionId });
 export const reportPlaybackError = (sessionId: string, message: string) => invoke<void>("playback_error", { sessionId, message });
+export const getAppVersion = () => invoke<string>("get_app_version");
+export const checkAppUpdate = () => invoke<AppUpdateCheckResult>("check_app_update");
+export const downloadAndInstallUpdate = () => invoke<void>("download_and_install_update");
+export const restartApp = () => invoke<void>("restart_app");
 
 export function onPlayback(callback: (request: PlaybackRequest) => void): Promise<UnlistenFn> {
   return listen<PlaybackRequest>("motioncue://playback", (event) => callback(event.payload));
@@ -32,4 +36,8 @@ export function onPlayback(callback: (request: PlaybackRequest) => void): Promis
 
 export function onPlaybackStop(callback: (sessionId?: string) => void): Promise<UnlistenFn> {
   return listen<{ sessionId?: string }>("motioncue://stop", (event) => callback(event.payload.sessionId));
+}
+
+export function onAppUpdateEvent(callback: (payload: AppUpdateEventPayload) => void): Promise<UnlistenFn> {
+  return listen<AppUpdateEventPayload>("app-update-event", (event) => callback(event.payload));
 }

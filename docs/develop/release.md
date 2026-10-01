@@ -63,16 +63,34 @@ scripts/release/sync_gitee_release.py
 2. 通过代理 `http://192.168.3.36:7890` 下载 GitHub Release 附件。
 3. 使用 `GITEE_ACCESS_TOKEN` 创建或更新 Gitee 的 `latest` Release。
 4. 删除 Gitee `latest` Release 上的旧附件，并上传本次发布附件。
-5. 如果未来启用 Tauri updater 并生成 `latest.json`，同步脚本会把其中的下载地址改写为 Gitee 地址。
+5. 对 `latest.json` 中的下载地址改写为 Gitee 地址，保证应用内更新优先走 Gitee 镜像。
 
-当前项目尚未启用 Tauri updater，因此同步目标主要是安装包等 Release 附件。
+当前项目已启用 Tauri updater，发布资产会包含 `latest.json`、安装包和对应签名文件。同步脚本会把 `latest.json` 中的下载地址改写为 Gitee `latest` Release 附件地址，应用会优先检查 Gitee，再回退到 GitHub。
+
+## Tauri updater 签名配置
+
+首次正式发布前需要生成一次 updater 签名密钥：
+
+```powershell
+npx tauri signer generate
+```
+
+生成后只提交 public key：
+
+1. 把 public key 填入 `src-tauri/tauri.conf.json` 的 `plugins.updater.pubkey`，替换 `REPLACE_WITH_TAURI_UPDATER_PUBLIC_KEY`。
+2. 不要提交 private key。
+3. 在 GitHub 仓库 `Settings -> Secrets and variables -> Actions` 中新增：
+   - `TAURI_SIGNING_PRIVATE_KEY`
+   - `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`
+
+Release workflow 会在构建前校验 updater 公钥和签名 Secrets。如果仍是占位公钥，或者没有配置 Secrets，workflow 会提前失败。
 
 ## GitHub 仓库配置
 
 需要在 GitHub 仓库中完成以下配置：
 
 1. `Settings -> Actions -> General`：确认 GitHub Actions 已启用；工作流中已声明 `contents: write` 用于发布 Release 资产。
-2. `Settings -> Secrets and variables -> Actions`：新增仓库 Secret `GITEE_ACCESS_TOKEN`，值为具备 Gitee Release 创建、更新和附件上传权限的访问令牌。
+2. `Settings -> Secrets and variables -> Actions`：新增仓库 Secret `GITEE_ACCESS_TOKEN`，值为具备 Gitee Release 创建、更新和附件上传权限的访问令牌；同时新增 updater 签名 Secrets `TAURI_SIGNING_PRIVATE_KEY` 和 `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`。
 3. `Settings -> Actions -> Runners`：新增仓库级 self-hosted runner，并确保标签包含 `self-hosted`、`linux`、`x64`、`gitee-sync`。
 4. 确认 runner 机器已安装 `python3`、`curl`、`git`，并能访问 GitHub Release 下载地址与 `https://gitee.com/api/v5`。
 
@@ -148,4 +166,11 @@ cargo test --manifest-path src-tauri/Cargo.toml
 npm run tauri:build
 ```
 
-当前项目尚未启用 Tauri updater，因此发布工作流不会要求签名密钥，也不会生成 `latest.json`。
+## 发布后验证
+
+发布完成后检查：
+
+1. GitHub Release 中存在 Windows NSIS、macOS DMG、`.sig` 和 `latest.json`。
+2. Gitee `latest` Release 中存在同步后的安装包、签名文件和 `latest.json`。
+3. 直接打开 `https://gitee.com/hongxiaojian/motion-cue/releases/download/latest/latest.json`，确认其中的下载地址指向 Gitee。
+4. 安装旧版本 MotionCue，在“全局设置 -> 应用更新”中检查更新、下载并安装，然后重启确认版本号已更新。

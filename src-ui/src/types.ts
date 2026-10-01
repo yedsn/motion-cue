@@ -110,6 +110,29 @@ export type DiagnosticEntry = {
   command?: string;
 };
 
+export type AppUpdateSummary = {
+  version: string;
+  currentVersion: string;
+  notes?: string;
+  pubDate?: string;
+  target: string;
+  downloadUrl: string;
+};
+
+export type AppUpdateCheckResult = {
+  available: boolean;
+  currentVersion: string;
+  update?: AppUpdateSummary;
+};
+
+export type AppUpdateEventPayload = {
+  stage: "download_started" | "download_progress" | "download_finished" | "installed" | "failed";
+  downloadedBytes?: number;
+  chunkLength?: number;
+  contentLength?: number;
+  message?: string;
+};
+
 export type PluginHostMessage =
   | { version: 1; sessionId: string; type: "ready" }
   | { version: 1; sessionId: string; type: "complete" }
