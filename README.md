@@ -18,6 +18,7 @@
   <a href="https://github.com/yedsn/motion-cue/actions/workflows/release.yml">
     <img src="https://github.com/yedsn/motion-cue/actions/workflows/release.yml/badge.svg" alt="Release">
   </a>
+  <img src="https://img.shields.io/badge/License-MIT-yellow" alt="MIT License">
 </p>
 
 <p align="center">
@@ -224,12 +225,9 @@ MotionCue 支持使用 Web 插件扩展动画能力。
 
 ## License
 
-`src-tauri/Cargo.toml` 当前声明本项目采用 **MIT License**。
+本项目采用 **MIT License** 许可证。
 
-仓库根目录目前还没有 `LICENSE` 文件。正式开源发布前，建议补充根目录 `LICENSE` 文件，并同步检查：
+- 允许个人和商业使用、修改、分发、私有 fork
+- 需要在副本中保留版权声明和许可声明
 
-- `README.md` 的 License 说明
-- `src-tauri/Cargo.toml` 的 `license` 字段
-- 如未来需要发布 npm 包，再补充 `package.json` 的 `license` 字段
-
-MIT License 通常允许个人和商业使用、修改、分发、私有 fork，并要求在副本中保留版权声明和许可声明。
+完整条款见：[LICENSE](LICENSE)。
