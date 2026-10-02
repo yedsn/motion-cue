@@ -65,7 +65,7 @@ scripts/release/sync_gitee_release.py
 4. 删除 Gitee `latest` Release 上的旧附件，并上传本次发布附件。
 5. 对 `latest.json` 中的下载地址改写为 Gitee 地址，保证应用内更新优先走 Gitee 镜像。
 
-当前项目已启用 Tauri updater，发布资产会包含 `latest.json`、安装包和对应签名文件。同步脚本会把 `latest.json` 中的下载地址改写为 Gitee `latest` Release 附件地址，应用会优先检查 Gitee，再回退到 GitHub。
+当前项目已启用 Tauri updater，发布资产会包含 `latest.json`、安装包和对应签名文件。`src-tauri/tauri.conf.json` 中的 updater endpoints 顺序固定为 Gitee 优先、GitHub 兜底：应用会先请求 Gitee `latest.json`，Gitee 不可用或拉取失败时再回退到 GitHub。同步脚本会把 Gitee 侧 `latest.json` 中的下载地址改写为 Gitee `latest` Release 附件地址。
 
 ## Tauri updater 签名配置
 
@@ -174,3 +174,4 @@ npm run tauri:build
 2. Gitee `latest` Release 中存在同步后的安装包、签名文件和 `latest.json`。
 3. 直接打开 `https://gitee.com/hongxiaojian/motion-cue/releases/download/latest/latest.json`，确认其中的下载地址指向 Gitee。
 4. 安装旧版本 MotionCue，在“全局设置 -> 应用更新”中检查更新、下载并安装，然后重启确认版本号已更新。
+5. 分别验证更新源顺序：正常网络下应优先命中 Gitee；临时让 Gitee endpoint 不可用时，应能回退到 GitHub `latest.json`。
