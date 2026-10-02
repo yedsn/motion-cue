@@ -1,7 +1,7 @@
 export const SCHEMA_VERSION = 1;
 
 export type AnimationKind = "builtin" | "configured" | "web-plugin";
-export type RendererKind = "confetti" | "badge" | "pulse" | "ring" | "shake" | "completion" | "plugin";
+export type RendererKind = "confetti" | "badge" | "pulse" | "ring" | "shake" | "completion" | "material-flow" | "corner-fireworks" | "focus-spotlight" | "plugin";
 export type MonitorTarget = "all" | "primary";
 export type TransitionKind = "none" | "fade" | "scale" | "slide-up";
 
@@ -10,6 +10,14 @@ export type AudioConfig = {
   resourceId?: string;
   volume: number;
   delayMs: number;
+};
+
+export type AudioLibraryItem = {
+  resourceId: string;
+  name: string;
+  fileName: string;
+  sizeBytes: number;
+  builtIn: boolean;
 };
 
 export type MotionTransitionConfig = {

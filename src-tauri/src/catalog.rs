@@ -43,7 +43,7 @@ pub fn builtins() -> Vec<AnimationDefinition> {
             RendererKind::Completion,
             3600,
             vec!["#d9ff9f", "#91f5d4", "#ffd27a", "#f8fff1", "#8bb8ff"],
-            Some("builtin/completion-success.wav"),
+            Some("audio/completion-success.wav"),
         ),
         animation(
             "success",
@@ -53,24 +53,14 @@ pub fn builtins() -> Vec<AnimationDefinition> {
             RendererKind::Badge,
             2200,
             vec!["#34c584", "#c9ef8f"],
-            Some("builtin/soft-chime.wav"),
-        ),
-        animation(
-            "milestone",
-            "里程碑",
-            "更强烈的里程碑庆祝",
-            "milestone",
-            RendererKind::Ring,
-            4200,
-            vec!["#ffd27a", "#ff8e72", "#d9ff9f"],
-            Some("builtin/bright-pop.wav"),
+            Some("audio/soft-chime.wav"),
         ),
         animation(
             "focus-start",
             "开始专注",
             "轻量聚焦提示",
             "focus-start",
-            RendererKind::Pulse,
+            RendererKind::FocusSpotlight,
             1800,
             vec!["#8bb8ff", "#91f5d4"],
             None,
@@ -95,6 +85,36 @@ pub fn builtins() -> Vec<AnimationDefinition> {
             vec!["#d9ff9f", "#91f5d4", "#ffd27a"],
             None,
         ),
+        animation(
+            "material-flow",
+            "全屏材质",
+            "流动粒子材质反馈",
+            "material-flow",
+            RendererKind::MaterialFlow,
+            3600,
+            vec!["#8bb8ff", "#91f5d4", "#f8fff1"],
+            None,
+        ),
+        animation(
+            "corner-fireworks",
+            "角落烟花",
+            "从屏幕角落发射的庆祝烟花",
+            "corner-fireworks",
+            RendererKind::CornerFireworks,
+            3200,
+            vec!["#ffd27a", "#ff8e72", "#d9ff9f", "#8bb8ff"],
+            Some("audio/bright-pop.wav"),
+        ),
+        animation(
+            "focus-spotlight",
+            "专注光罩",
+            "克制的全屏聚焦光罩",
+            "focus-spotlight",
+            RendererKind::FocusSpotlight,
+            1800,
+            vec!["#8bb8ff", "#91f5d4"],
+            None,
+        ),
     ]
 }
 
@@ -108,8 +128,7 @@ fn animation(
     colors: Vec<&str>,
     sound: Option<&str>,
 ) -> AnimationDefinition {
-    let mut options = serde_json::Map::new();
-    options.insert("particleCount".into(), serde_json::json!(120));
+    let options = default_options(&renderer);
     AnimationDefinition {
         id: id.into(),
         kind: AnimationKind::Builtin,
@@ -133,6 +152,39 @@ fn animation(
         transition: None,
         plugin_id: None,
     }
+}
+
+fn default_options(renderer: &RendererKind) -> serde_json::Map<String, serde_json::Value> {
+    let mut options = serde_json::Map::new();
+    match renderer {
+        RendererKind::Confetti | RendererKind::Completion => {
+            options.insert("particleCount".into(), serde_json::json!(120));
+            options.insert("particleSize".into(), serde_json::json!(1.0));
+            options.insert("angle".into(), serde_json::json!(58));
+        }
+        RendererKind::CornerFireworks => {
+            options.insert("particleCount".into(), serde_json::json!(72));
+            options.insert("particleSize".into(), serde_json::json!(1.0));
+            options.insert("burstCount".into(), serde_json::json!(4));
+            options.insert("spread".into(), serde_json::json!(72));
+            options.insert("speed".into(), serde_json::json!(1.0));
+            options.insert("corners".into(), serde_json::json!(["bottom-left", "bottom-right"]));
+        }
+        RendererKind::MaterialFlow => {
+            options.insert("intensity".into(), serde_json::json!(0.72));
+            options.insert("speed".into(), serde_json::json!(0.8));
+            options.insert("density".into(), serde_json::json!(120));
+            options.insert("brightness".into(), serde_json::json!(0.72));
+        }
+        RendererKind::FocusSpotlight => {
+            options.insert("spotlightSize".into(), serde_json::json!(0.42));
+            options.insert("dimAmount".into(), serde_json::json!(0.38));
+            options.insert("pulseStrength".into(), serde_json::json!(0.28));
+            options.insert("showText".into(), serde_json::json!(true));
+        }
+        RendererKind::Badge | RendererKind::Pulse | RendererKind::Ring | RendererKind::Shake | RendererKind::Plugin => {}
+    }
+    options
 }
 
 pub fn normalize_command(command: &str) -> Result<String, String> {
@@ -180,22 +232,67 @@ pub fn validate_animation(animation: &AnimationDefinition) -> Result<(), String>
             return Err(format!("配置型动画不能包含 {forbidden}"));
         }
     }
-    if let Some(count) = animation
-        .options
-        .get("particleCount")
-        .and_then(|value| value.as_u64())
-    {
-        if !(1..=500).contains(&count) {
-            return Err("粒子数量必须在 1 到 500 之间".into());
+    validate_options(animation)?;
+    Ok(())
+}
+
+fn validate_options(animation: &AnimationDefinition) -> Result<(), String> {
+    validate_number_option(animation, "particleCount", 1.0, 500.0, "粒子数量必须在 1 到 500 之间")?;
+    validate_number_option(animation, "particleSize", 0.4, 2.5, "粒子大小必须在 0.4 到 2.5 之间")?;
+    validate_number_option(animation, "angle", 0.0, 180.0, "喷发方向必须在 0 到 180 度之间")?;
+    match animation.renderer {
+        RendererKind::MaterialFlow => {
+            validate_number_option(animation, "intensity", 0.0, 1.0, "强度必须在 0 到 1 之间")?;
+            validate_number_option(animation, "speed", 0.1, 3.0, "速度必须在 0.1 到 3 之间")?;
+            validate_number_option(animation, "density", 1.0, 300.0, "密度必须在 1 到 300 之间")?;
+            validate_number_option(animation, "brightness", 0.0, 1.0, "亮度必须在 0 到 1 之间")?;
         }
+        RendererKind::CornerFireworks => {
+            validate_number_option(animation, "burstCount", 1.0, 12.0, "烟花批次必须在 1 到 12 之间")?;
+            validate_number_option(animation, "spread", 1.0, 180.0, "扩散范围必须在 1 到 180 之间")?;
+            validate_number_option(animation, "speed", 0.1, 3.0, "速度必须在 0.1 到 3 之间")?;
+            validate_corners(animation)?;
+        }
+        RendererKind::FocusSpotlight => {
+            validate_number_option(animation, "spotlightSize", 0.1, 1.0, "光罩大小必须在 0.1 到 1 之间")?;
+            validate_number_option(animation, "dimAmount", 0.0, 0.75, "压暗程度必须在 0 到 0.75 之间")?;
+            validate_number_option(animation, "pulseStrength", 0.0, 1.0, "呼吸强度必须在 0 到 1 之间")?;
+            if let Some(value) = animation.options.get("showText") {
+                if !value.is_boolean() {
+                    return Err("文字显示开关必须为布尔值".into());
+                }
+            }
+        }
+        _ => {}
     }
-    if let Some(angle) = animation
-        .options
-        .get("angle")
-        .and_then(|value| value.as_f64())
-    {
-        if !(0.0..=180.0).contains(&angle) {
-            return Err("喷发方向必须在 0 到 180 度之间".into());
+    Ok(())
+}
+
+fn validate_number_option(
+    animation: &AnimationDefinition,
+    key: &str,
+    min: f64,
+    max: f64,
+    message: &str,
+) -> Result<(), String> {
+    let Some(value) = animation.options.get(key) else { return Ok(()); };
+    let Some(number) = value.as_f64() else { return Err(message.into()); };
+    if number < min || number > max {
+        return Err(message.into());
+    }
+    Ok(())
+}
+
+fn validate_corners(animation: &AnimationDefinition) -> Result<(), String> {
+    let Some(value) = animation.options.get("corners") else { return Ok(()); };
+    let Some(items) = value.as_array() else { return Err("发射角落配置无效".into()); };
+    if items.is_empty() || items.len() > 4 {
+        return Err("发射角落配置无效".into());
+    }
+    for item in items {
+        match item.as_str() {
+            Some("top-left" | "top-right" | "bottom-left" | "bottom-right") => {}
+            _ => return Err("发射角落配置无效".into()),
         }
     }
     Ok(())
@@ -278,6 +375,19 @@ mod tests {
     }
 
     #[test]
+    fn default_catalog_has_revised_effects() {
+        let ids = builtins()
+            .into_iter()
+            .map(|animation| animation.id)
+            .collect::<Vec<_>>();
+        assert_eq!(ids.len(), 9);
+        assert!(ids.contains(&"material-flow".into()));
+        assert!(ids.contains(&"corner-fireworks".into()));
+        assert!(ids.contains(&"focus-spotlight".into()));
+        assert!(!ids.contains(&"milestone".into()));
+    }
+
+    #[test]
     fn conflict_is_rejected() {
         let mut config = default_config();
         config.animations[1].aliases.push("confetti".into());
@@ -291,6 +401,51 @@ mod tests {
             .options
             .insert("script".into(), serde_json::json!("alert(1)"));
         assert!(validate_animation(&animation).is_err());
+    }
+
+    #[test]
+    fn renderer_options_are_validated() {
+        let mut animation = builtins()
+            .into_iter()
+            .find(|animation| animation.id == "material-flow")
+            .unwrap();
+        animation
+            .options
+            .insert("density".into(), serde_json::json!(301));
+        assert!(validate_animation(&animation).is_err());
+
+        let mut animation = builtins()
+            .into_iter()
+            .find(|animation| animation.id == "corner-fireworks")
+            .unwrap();
+        animation
+            .options
+            .insert("corners".into(), serde_json::json!(["center"]));
+        assert!(validate_animation(&animation).is_err());
+
+        let mut animation = builtins()
+            .into_iter()
+            .find(|animation| animation.id == "confetti")
+            .unwrap();
+        animation
+            .options
+            .insert("particleSize".into(), serde_json::json!(2.6));
+        assert!(validate_animation(&animation).is_err());
+    }
+
+    #[test]
+    fn legacy_milestone_remains_valid() {
+        let animation = animation(
+            "milestone",
+            "里程碑",
+            "旧版里程碑",
+            "milestone",
+            RendererKind::Ring,
+            4200,
+            vec!["#ffd27a", "#ff8e72"],
+            Some("audio/bright-pop.wav"),
+        );
+        assert!(validate_animation(&animation).is_ok());
     }
 
     #[test]

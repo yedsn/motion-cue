@@ -2,7 +2,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::RwLock;
 
-use crate::catalog::{command_index, default_config, validate_animation, validate_transition};
+use crate::catalog::{builtins, command_index, default_config, validate_animation, validate_transition};
 use crate::models::{AppConfig, SCHEMA_VERSION};
 
 pub struct ConfigStore {
@@ -14,7 +14,7 @@ pub struct ConfigStore {
 impl ConfigStore {
     pub fn load(path: PathBuf) -> Result<(Self, Option<String>), String> {
         let backup_path = path.with_extension("backup.json");
-        let (config, recovery) = match read_valid(&path) {
+        let (mut config, recovery) = match read_valid(&path) {
             Ok(config) => (config, None),
             Err(primary_error) => match read_valid(&backup_path) {
                 Ok(config) => (
@@ -27,6 +27,7 @@ impl ConfigStore {
                 ),
             },
         };
+        merge_missing_builtins(&mut config)?;
         let store = Self {
             path,
             backup_path,
@@ -86,6 +87,20 @@ impl ConfigStore {
     }
 }
 
+fn merge_missing_builtins(config: &mut AppConfig) -> Result<(), String> {
+    let existing_ids = config
+        .animations
+        .iter()
+        .map(|animation| animation.id.clone())
+        .collect::<std::collections::HashSet<_>>();
+    for animation in builtins() {
+        if !existing_ids.contains(&animation.id) {
+            config.animations.push(animation);
+        }
+    }
+    validate_config(config)
+}
+
 pub fn validate_config(config: &AppConfig) -> Result<(), String> {
     if config.schema_version != SCHEMA_VERSION {
         return Err(format!("不支持的配置版本: {}", config.schema_version));
@@ -125,6 +140,7 @@ fn read_valid(path: &Path) -> Result<AppConfig, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::models::{AnimationDefinition, AnimationKind, AudioConfig, MonitorTarget, RendererKind};
 
     #[test]
     fn rejects_future_schema() {
@@ -146,5 +162,80 @@ mod tests {
         let (store, recovery) = ConfigStore::load(path).unwrap();
         assert!(recovery.is_some());
         assert_eq!(store.get().schema_version, SCHEMA_VERSION);
+    }
+
+    #[test]
+    fn accepts_legacy_milestone_config() {
+        let mut config = default_config();
+        config.animations.push(AnimationDefinition {
+            id: "milestone".into(),
+            kind: AnimationKind::Builtin,
+            name: "里程碑".into(),
+            description: "旧版里程碑".into(),
+            command: "milestone".into(),
+            aliases: Vec::new(),
+            enabled: true,
+            renderer: RendererKind::Ring,
+            duration_ms: 4200,
+            target: MonitorTarget::All,
+            text: Some("里程碑".into()),
+            colors: vec!["#ffd27a".into(), "#ff8e72".into()],
+            options: serde_json::Map::new(),
+            audio: AudioConfig {
+                enabled: false,
+                resource_id: None,
+                volume: 0.6,
+                delay_ms: 0,
+            },
+            transition: None,
+            plugin_id: None,
+        });
+        assert!(validate_config(&config).is_ok());
+    }
+
+    #[test]
+    fn load_merges_new_builtins_without_removing_legacy_entries() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("config.json");
+        let mut config = default_config();
+        config
+            .animations
+            .retain(|animation| !matches!(animation.id.as_str(), "material-flow" | "corner-fireworks" | "focus-spotlight"));
+        config.animations.push(AnimationDefinition {
+            id: "milestone".into(),
+            kind: AnimationKind::Builtin,
+            name: "里程碑".into(),
+            description: "旧版里程碑".into(),
+            command: "milestone".into(),
+            aliases: Vec::new(),
+            enabled: true,
+            renderer: RendererKind::Ring,
+            duration_ms: 4200,
+            target: MonitorTarget::All,
+            text: Some("里程碑".into()),
+            colors: vec!["#ffd27a".into(), "#ff8e72".into()],
+            options: serde_json::Map::new(),
+            audio: AudioConfig {
+                enabled: false,
+                resource_id: None,
+                volume: 0.6,
+                delay_ms: 0,
+            },
+            transition: None,
+            plugin_id: None,
+        });
+        fs::write(&path, serde_json::to_vec(&config).unwrap()).unwrap();
+
+        let (store, _) = ConfigStore::load(path).unwrap();
+        let ids = store
+            .get()
+            .animations
+            .into_iter()
+            .map(|animation| animation.id)
+            .collect::<Vec<_>>();
+        assert!(ids.contains(&"milestone".into()));
+        assert!(ids.contains(&"material-flow".into()));
+        assert!(ids.contains(&"corner-fireworks".into()));
+        assert!(ids.contains(&"focus-spotlight".into()));
     }
 }

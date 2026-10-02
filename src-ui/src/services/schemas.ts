@@ -23,10 +23,45 @@ export function validateAnimation(animation: AnimationDefinition): string[] {
   if (animation.text && animation.text.length > 200) errors.push("文字不能超过 200 个字符");
   const particleCount = animation.options.particleCount;
   if (typeof particleCount === "number" && (particleCount < 1 || particleCount > 500)) errors.push("粒子数量必须在 1 到 500 之间");
+  const particleSize = animation.options.particleSize;
+  if (typeof particleSize === "number" && (particleSize < 0.4 || particleSize > 2.5)) errors.push("粒子大小必须在 0.4 到 2.5 之间");
   const angle = animation.options.angle;
   if (typeof angle === "number" && (angle < 0 || angle > 180)) errors.push("喷发方向必须在 0 到 180 度之间");
+  validateRendererOptions(animation, errors);
   if ("script" in animation.options || "url" in animation.options || "html" in animation.options) errors.push("配置型动画不能包含脚本、网址或 HTML");
   return errors;
+}
+
+function validateRendererOptions(animation: AnimationDefinition, errors: string[]) {
+  if (animation.renderer === "material-flow") {
+    validateNumber(animation.options.intensity, 0, 1, "强度必须在 0 到 1 之间", errors);
+    validateNumber(animation.options.speed, 0.1, 3, "速度必须在 0.1 到 3 之间", errors);
+    validateNumber(animation.options.density, 1, 300, "密度必须在 1 到 300 之间", errors);
+    validateNumber(animation.options.brightness, 0, 1, "亮度必须在 0 到 1 之间", errors);
+  }
+  if (animation.renderer === "corner-fireworks") {
+    validateNumber(animation.options.burstCount, 1, 12, "烟花批次必须在 1 到 12 之间", errors);
+    validateNumber(animation.options.spread, 1, 180, "扩散范围必须在 1 到 180 之间", errors);
+    validateNumber(animation.options.speed, 0.1, 3, "速度必须在 0.1 到 3 之间", errors);
+    validateCorners(animation.options.corners, errors);
+  }
+  if (animation.renderer === "focus-spotlight") {
+    validateNumber(animation.options.spotlightSize, 0.1, 1, "光罩大小必须在 0.1 到 1 之间", errors);
+    validateNumber(animation.options.dimAmount, 0, 0.75, "压暗程度必须在 0 到 0.75 之间", errors);
+    validateNumber(animation.options.pulseStrength, 0, 1, "呼吸强度必须在 0 到 1 之间", errors);
+    if ("showText" in animation.options && typeof animation.options.showText !== "boolean") errors.push("文字显示开关必须为布尔值");
+  }
+}
+
+function validateNumber(value: unknown, min: number, max: number, message: string, errors: string[]) {
+  if (value === undefined) return;
+  if (typeof value !== "number" || value < min || value > max) errors.push(message);
+}
+
+function validateCorners(value: unknown, errors: string[]) {
+  if (value === undefined) return;
+  const allowed = new Set(["top-left", "top-right", "bottom-left", "bottom-right"]);
+  if (!Array.isArray(value) || value.length < 1 || value.length > 4 || value.some((item) => typeof item !== "string" || !allowed.has(item))) errors.push("发射角落配置无效");
 }
 
 export function parsePluginHostMessage(value: unknown): PluginHostMessage | null {

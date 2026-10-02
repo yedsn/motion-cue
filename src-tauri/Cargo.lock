@@ -2207,7 +2207,7 @@ dependencies = [
 
 [[package]]
 name = "motion-cue"
-version = "0.1.6"
+version = "0.1.9"
 dependencies = [
  "base64 0.22.1",
  "directories",

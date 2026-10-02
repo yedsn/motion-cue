@@ -25,10 +25,19 @@ export function renderAnimation(root: HTMLElement, request: PlaybackRequest): Ru
   if (animation.renderer === "confetti" || animation.renderer === "completion") {
     launchConfetti(fire, animation, request.transition, request.targetFrameRate, cleanups);
   }
-  if (animation.renderer !== "confetti") {
+  if (animation.renderer === "corner-fireworks") {
+    launchCornerFireworks(fire, animation, request.targetFrameRate, cleanups);
+  }
+  if (animation.renderer === "material-flow") {
+    launchMaterialFlow(canvas, animation, request.targetFrameRate, cleanups);
+  }
+  if (animation.renderer === "focus-spotlight") {
+    root.append(createSpotlight(animation));
+  }
+  if (shouldCreateBadge(animation)) {
     root.append(createBadge(animation));
   }
-  if (animation.renderer === "ring" || animation.renderer === "completion") {
+  if (animation.renderer === "ring") {
     const ring = document.createElement("div");
     ring.className = "fx-ring";
     ring.style.setProperty("--accent", animation.colors[0]);
@@ -59,6 +68,12 @@ export function renderAnimation(root: HTMLElement, request: PlaybackRequest): Ru
   };
 }
 
+function shouldCreateBadge(animation: AnimationDefinition) {
+  if (animation.renderer === "confetti" || animation.renderer === "material-flow") return false;
+  if (animation.renderer === "focus-spotlight") return booleanOption(animation, "showText", true);
+  return true;
+}
+
 export function transitionAnimation(transition: MotionTransitionConfig, durationMs: number) {
   const animations: string[] = [];
   if (transition.enter !== "none" && transition.enterMs > 0) {
@@ -78,7 +93,8 @@ export function audioSchedule(request: PlaybackRequest) {
 
 export function audioSource(request: PlaybackRequest) {
   const builtin = request.animation.audio.resourceId?.startsWith("builtin/") ? request.animation.audio.resourceId.replace("builtin/", "/audio/") : undefined;
-  return request.audioDataUrl ?? builtin;
+  const packaged = request.animation.audio.resourceId?.startsWith("audio/") ? request.animation.audio.resourceId.replace("audio/", "/audio/") : undefined;
+  return request.audioDataUrl ?? builtin ?? packaged;
 }
 
 export function effectiveTransition(request: PlaybackRequest): MotionTransitionConfig {
@@ -90,10 +106,11 @@ function launchConfetti(fire: ReturnType<typeof confetti.create>, animation: Ani
   const colors = animation.colors;
   const quality = renderQuality(targetFrameRate);
   const particleCount = Math.max(1, Math.round(numberOption(animation, "particleCount", animation.renderer === "completion" ? 64 : 100) * quality.particleScale));
+  const particleSize = numberOption(animation, "particleSize", 1);
   const direction = numberOption(animation, "angle", 58);
   const shapes = particleShapes();
   const side = (x: number, angle: number, delay: number, count = particleCount) => {
-    timers.push(window.setTimeout(() => fire({ particleCount: Math.round(count * random(0.86, 1.14)), colors, angle: angle + random(-5, 5), spread: random(24, 38), startVelocity: random(58, 74), decay: random(.92, .95), gravity: random(.38, .62), drift: x < .5 ? random(.04,.18) : random(-.18,-.04), scalar: random(.72,1.12), ticks: Math.round(random(185,245) * quality.tickScale), origin: { x: x + random(-.02,.02), y: random(.88,.98) }, shapes }), delay));
+    timers.push(window.setTimeout(() => fire({ particleCount: Math.round(count * random(0.86, 1.14)), colors, angle: angle + random(-5, 5), spread: random(24, 38), startVelocity: random(58, 74), decay: random(.92, .95), gravity: random(.38, .62), drift: x < .5 ? random(.04,.18) : random(-.18,-.04), scalar: random(.72,1.12) * particleSize, ticks: Math.round(random(185,245) * quality.tickScale), origin: { x: x + random(-.02,.02), y: random(.88,.98) }, shapes }), delay));
   };
   side(0.03, direction, 0);
   side(0.97, 180 - direction, 40);
@@ -106,6 +123,76 @@ function launchConfetti(fire: ReturnType<typeof confetti.create>, animation: Ani
     }
   }
   cleanups.push(() => timers.forEach((timer) => window.clearTimeout(timer)));
+}
+
+function launchCornerFireworks(fire: ReturnType<typeof confetti.create>, animation: AnimationDefinition, targetFrameRate: number, cleanups: Array<() => void>) {
+  const timers: number[] = [];
+  const quality = renderQuality(targetFrameRate);
+  const particleCount = Math.max(1, Math.round(numberOption(animation, "particleCount", 72) * quality.particleScale));
+  const particleSize = numberOption(animation, "particleSize", 1);
+  const burstCount = Math.max(1, Math.round(numberOption(animation, "burstCount", 4)));
+  const spread = numberOption(animation, "spread", 72);
+  const speed = numberOption(animation, "speed", 1);
+  const corners = cornerOptions(animation);
+  const usableDuration = Math.max(600, animation.durationMs - 280);
+  for (let index = 0; index < burstCount; index += 1) {
+    const corner = corners[index % corners.length];
+    const delay = Math.round((usableDuration / Math.max(1, burstCount)) * index);
+    timers.push(window.setTimeout(() => fire({
+      particleCount: Math.round(particleCount * random(.68, 1.08)),
+      colors: animation.colors,
+      angle: corner.angle + random(-10, 10),
+      spread: spread + random(-8, 8),
+      startVelocity: random(46, 72) * speed,
+      decay: random(.9, .94),
+      gravity: random(.55, .82),
+      drift: corner.drift * random(.2, .58),
+      scalar: random(.72, 1.12) * particleSize,
+      ticks: Math.round(random(145, 220) * quality.tickScale),
+      origin: { x: corner.x, y: corner.y },
+      shapes: particleShapes(),
+    }), delay));
+  }
+  cleanups.push(() => timers.forEach((timer) => window.clearTimeout(timer)));
+}
+
+function launchMaterialFlow(canvas: HTMLCanvasElement, animation: AnimationDefinition, targetFrameRate: number, cleanups: Array<() => void>) {
+  const context = canvas.getContext("2d");
+  if (!context) return;
+  const quality = renderQuality(targetFrameRate);
+  const density = Math.max(1, Math.round(numberOption(animation, "density", 120) * quality.particleScale));
+  const speed = numberOption(animation, "speed", .8);
+  const intensity = numberOption(animation, "intensity", .72);
+  const brightness = numberOption(animation, "brightness", .72);
+  const particles = Array.from({ length: density }, () => ({ x: Math.random(), y: Math.random(), r: random(.7, 2.8), phase: random(0, Math.PI * 2), drift: random(.12, .7) }));
+  let frame = 0;
+  let raf = 0;
+  const draw = () => {
+    const width = canvas.width = canvas.clientWidth || innerWidth;
+    const height = canvas.height = canvas.clientHeight || innerHeight;
+    context.clearRect(0, 0, width, height);
+    context.globalCompositeOperation = "lighter";
+    const time = frame * .012 * speed;
+    for (let index = 0; index < particles.length; index += 1) {
+      const particle = particles[index];
+      particle.x = (particle.x + .0008 * speed * particle.drift) % 1;
+      particle.y = (particle.y + Math.sin(time + particle.phase) * .0007 * speed + 1) % 1;
+      const color = animation.colors[index % animation.colors.length] ?? "#ffffff";
+      const alpha = Math.max(.04, Math.min(.42, intensity * brightness * random(.18, .34)));
+      context.fillStyle = hexToRgba(color, alpha);
+      context.beginPath();
+      context.arc(particle.x * width, particle.y * height, particle.r * (1 + intensity * 2.2), 0, Math.PI * 2);
+      context.fill();
+    }
+    context.globalCompositeOperation = "source-over";
+    frame += 1;
+    raf = window.requestAnimationFrame(draw);
+  };
+  raf = window.requestAnimationFrame(draw);
+  cleanups.push(() => {
+    window.cancelAnimationFrame(raf);
+    context.clearRect(0, 0, canvas.width, canvas.height);
+  });
 }
 
 function particleShapes() {
@@ -144,21 +231,61 @@ function createBadge(animation: AnimationDefinition) {
   return badge;
 }
 
+function createSpotlight(animation: AnimationDefinition) {
+  const spotlight = document.createElement("div");
+  spotlight.className = "fx-spotlight";
+  spotlight.style.setProperty("--accent", animation.colors[0]);
+  spotlight.style.setProperty("--spotlight-size", `${numberOption(animation, "spotlightSize", .42) * 100}%`);
+  spotlight.style.setProperty("--dim", `${numberOption(animation, "dimAmount", .38)}`);
+  spotlight.style.setProperty("--pulse", `${numberOption(animation, "pulseStrength", .28)}`);
+  return spotlight;
+}
+
 function icon(renderer: AnimationDefinition["renderer"]) {
   if (renderer === "shake") return "!";
   if (renderer === "pulse") return "◎";
   if (renderer === "ring") return "★";
+  if (renderer === "corner-fireworks") return "✦";
+  if (renderer === "focus-spotlight") return "◎";
   return "✓";
 }
 
 function eyebrow(renderer: AnimationDefinition["renderer"]) {
   if (renderer === "shake") return "需要注意";
-  if (renderer === "pulse") return "进入状态";
+  if (renderer === "pulse" || renderer === "focus-spotlight") return "进入状态";
   if (renderer === "ring") return "里程碑达成";
+  if (renderer === "corner-fireworks") return "庆祝完成";
   return "MotionCue";
 }
 
 function numberOption(animation: AnimationDefinition, key: string, fallback: number) {
   const value = animation.options[key];
   return typeof value === "number" ? value : fallback;
+}
+
+function booleanOption(animation: AnimationDefinition, key: string, fallback: boolean) {
+  const value = animation.options[key];
+  return typeof value === "boolean" ? value : fallback;
+}
+
+function cornerOptions(animation: AnimationDefinition) {
+  const defaults = ["bottom-left", "bottom-right"];
+  const raw = Array.isArray(animation.options.corners) ? animation.options.corners : defaults;
+  const corners = raw.filter((value): value is string => typeof value === "string");
+  const selected = corners.length ? corners : defaults;
+  return selected.map((corner) => {
+    if (corner === "top-left") return { x: .03, y: .03, angle: 315, drift: .4 };
+    if (corner === "top-right") return { x: .97, y: .03, angle: 225, drift: -.4 };
+    if (corner === "bottom-right") return { x: .97, y: .97, angle: 135, drift: -.4 };
+    return { x: .03, y: .97, angle: 45, drift: .4 };
+  });
+}
+
+function hexToRgba(hex: string, alpha: number) {
+  const value = hex.replace("#", "");
+  const number = Number.parseInt(value, 16);
+  const red = (number >> 16) & 255;
+  const green = (number >> 8) & 255;
+  const blue = number & 255;
+  return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
 }

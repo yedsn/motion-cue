@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import type { AppConfig, AnimationDefinition, AppUpdateCheckResult, AppUpdateEventPayload, DiagnosticEntry, PlaybackRequest, PluginRecord, PluginRuntime } from "../types";
+import type { AppConfig, AnimationDefinition, AppUpdateCheckResult, AppUpdateEventPayload, AudioLibraryItem, DiagnosticEntry, PlaybackRequest, PluginRecord, PluginRuntime } from "../types";
 
 export const getConfig = () => invoke<AppConfig>("config_get");
 export const saveAnimation = (animation: AnimationDefinition) => invoke<AppConfig>("animation_save", { animation });
@@ -11,6 +11,7 @@ export const playAnimation = (command: string, params: Record<string, string> = 
 export const previewAnimation = (animation: AnimationDefinition, params: Record<string, string> = {}) => invoke<void>("animation_preview", { animation, params });
 export const stopAnimations = () => invoke<void>("animation_stop_all");
 export const importAudio = (path: string) => invoke<string>("audio_import", { path });
+export const listAudioLibrary = () => invoke<AudioLibraryItem[]>("audio_library_list");
 export const getAudioResource = (resourceId: string) => invoke<string>("audio_resource", { resourceId });
 export const exportAnimation = (id: string, path: string) => invoke<void>("animation_export", { id, path });
 export const importAnimation = (path: string) => invoke<AppConfig>("animation_import", { path });

@@ -49,7 +49,12 @@ function Invoke-MotionCue([string[]] $Arguments) {
 
 $list = Invoke-MotionCue @("list", "--json")
 $catalog = $list.Output | ConvertFrom-Json
-if (@($catalog).Count -ne 7) { throw "Expected seven built-in animations, got $(@($catalog).Count)" }
+if (@($catalog).Count -ne 9) { throw "Expected nine built-in animations, got $(@($catalog).Count)" }
+$commands = @($catalog | ForEach-Object { $_.command })
+foreach ($expected in @("confetti", "task-complete", "success", "focus-start", "error", "silent-confetti", "material-flow", "corner-fireworks", "focus-spotlight")) {
+  if ($commands -notcontains $expected) { throw "Missing built-in animation: $expected" }
+}
+if ($commands -contains "milestone") { throw "Fresh catalog should not include milestone" }
 
 $validConfig = Get-Content -LiteralPath $configPath -Raw -Encoding UTF8
 Set-Content -LiteralPath $backupPath -Value $validConfig -Encoding UTF8
@@ -62,7 +67,7 @@ Start-Sleep -Milliseconds 300
 Remove-Item -LiteralPath $endpointPath -Force -ErrorAction SilentlyContinue
 $recovered = Invoke-MotionCue @("list", "--json")
 $recoveredCatalog = $recovered.Output | ConvertFrom-Json
-if (@($recoveredCatalog).Count -ne 7) { throw "Config recovery failed; got $(@($recoveredCatalog).Count) animations" }
+if (@($recoveredCatalog).Count -ne 9) { throw "Config recovery failed; got $(@($recoveredCatalog).Count) animations" }
 
 $badPackageRoot = Join-Path ([IO.Path]::GetTempPath()) ("motioncue-bad-package-" + [Guid]::NewGuid())
 $badPackage = Join-Path ([IO.Path]::GetTempPath()) ("motioncue-bad-package-" + [Guid]::NewGuid() + ".zip")
@@ -74,7 +79,7 @@ $badImport = Invoke-MotionCue @("import-animation", $badPackage)
 if ($badImport.ExitCode -ne 1) { throw "unsupported animation package should fail, got $($badImport.ExitCode)" }
 $afterBadImport = Invoke-MotionCue @("list", "--json")
 $afterBadImportCatalog = $afterBadImport.Output | ConvertFrom-Json
-if (@($afterBadImportCatalog).Count -ne 7) { throw "bad package import changed catalog" }
+if (@($afterBadImportCatalog).Count -ne 9) { throw "bad package import changed catalog" }
 Remove-Item -LiteralPath $badPackage -Force -ErrorAction SilentlyContinue
 Remove-Item -LiteralPath $badPackageRoot -Recurse -Force -ErrorAction SilentlyContinue
 

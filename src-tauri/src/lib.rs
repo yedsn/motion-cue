@@ -1,17 +1,17 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
-use tauri::menu::{Menu, MenuItem};
+use tauri::menu::{CheckMenuItem, Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_deep_link::DeepLinkExt;
 use tauri_plugin_updater::UpdaterExt;
 
-mod catalog;
 mod audio;
+mod catalog;
 mod diagnostics;
 mod invocation;
 mod models;
@@ -33,6 +33,10 @@ pub struct AppState {
     pub diagnostics: Diagnostics,
     pub playback: PlaybackCoordinator,
     pub plugins_root: PathBuf,
+}
+
+pub struct TrayState {
+    pub mute_item: CheckMenuItem<tauri::Wry>,
 }
 
 const APP_UPDATE_EVENT: &str = "app-update-event";
@@ -208,6 +212,7 @@ fn run(initial_intent: LaunchIntent) -> Result<(), String> {
                 .path()
                 .app_data_dir()
                 .map_err(|error| format!("读取应用数据目录失败: {error}"))?;
+            audio::seed_library(app.handle())?;
             let config_path = data_dir.join("config.json");
             let (config, recovery) = ConfigStore::load(config_path)?;
             let diagnostics = Diagnostics::new(
@@ -281,6 +286,7 @@ fn run(initial_intent: LaunchIntent) -> Result<(), String> {
             animation_export,
             animation_import,
             audio_import,
+            audio_library_list,
             audio_resource,
             diagnostics_get,
             diagnostics_record,
@@ -315,9 +321,19 @@ fn setup_tray(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let open = MenuItem::with_id(app, "open", "打开 MotionCue", true, None::<&str>)?;
     let check_update = MenuItem::with_id(app, "check_update", "检查更新", true, None::<&str>)?;
     let stop = MenuItem::with_id(app, "stop", "停止全部动画", true, None::<&str>)?;
-    let mute = MenuItem::with_id(app, "mute", "切换全局静音", true, None::<&str>)?;
+    let mute = CheckMenuItem::with_id(
+        app,
+        "mute",
+        "全局静音",
+        true,
+        app.state::<AppState>().config.get().settings.muted,
+        None::<&str>,
+    )?;
     let quit = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&open, &check_update, &stop, &mute, &quit])?;
+    app.manage(TrayState {
+        mute_item: mute.clone(),
+    });
     let tray = TrayIconBuilder::with_id("motioncue")
         .icon(
             app.default_window_icon()
@@ -339,13 +355,15 @@ fn setup_tray(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         }
         "mute" => {
             let current = app.state::<AppState>().config.get();
-            let _ = settings_update(
+            if let Ok(config) = settings_update(
                 app.clone(),
                 models::GlobalSettings {
                     muted: !current.settings.muted,
                     ..current.settings
                 },
-            );
+            ) {
+                sync_tray_mute_checked(app, config.settings.muted);
+            }
         }
         "quit" => {
             let _ = app.exit(0);
@@ -369,6 +387,12 @@ fn setup_tray(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     })
     .build(app)?;
     Ok(())
+}
+
+fn sync_tray_mute_checked(app: &AppHandle, muted: bool) {
+    if let Some(state) = app.try_state::<TrayState>() {
+        let _ = state.mute_item.set_checked(muted);
+    }
 }
 
 fn handle_ipc(app: &AppHandle, command: IpcCommand) -> IpcResponse {
@@ -695,6 +719,7 @@ fn settings_update(app: AppHandle, settings: models::GlobalSettings) -> Result<A
         config.settings = settings.clone();
         Ok(())
     })?;
+    sync_tray_mute_checked(&app, config.settings.muted);
     state
         .diagnostics
         .set_retention(config.settings.diagnostics_retention);
@@ -803,12 +828,7 @@ fn animation_export(
         .clone()
         .filter(|value| !value.starts_with("builtin/"))
         .and_then(|resource_id| {
-            let source = app
-                .path()
-                .app_data_dir()
-                .ok()?
-                .join("resources")
-                .join(&resource_id);
+            let source = audio::resource_path(&app, &resource_id).ok()?;
             source.is_file().then_some(source)
         });
     if let Some(source) = &managed_audio {
@@ -900,7 +920,7 @@ fn animation_import_inner(
     if matches!(animation.kind, models::AnimationKind::WebPlugin) {
         return Err("动画包不能导入 Web 插件".into());
     }
-    let mut managed_resource: Option<(PathBuf, Vec<u8>)> = None;
+    let mut managed_resource: Option<PathBuf> = None;
     if let Some(package_resource) = animation
         .audio
         .resource_id
@@ -913,26 +933,13 @@ fn animation_import_inner(
         if resource.size() > 8 * 1024 * 1024 {
             return Err("动画音效超过 8 MB 限制".into());
         }
-        let extension = std::path::Path::new(&package_resource)
-            .extension()
-            .and_then(|value| value.to_str())
-            .unwrap_or("wav")
-            .to_ascii_lowercase();
-        if !["wav", "mp3", "ogg"].contains(&extension.as_str()) {
-            return Err("动画包音效格式不受支持".into());
-        }
         let mut bytes = Vec::with_capacity(resource.size() as usize);
         std::io::Read::read_to_end(&mut resource, &mut bytes)
             .map_err(|error| format!("读取动画音效失败: {error}"))?;
-        let resource_id = format!("audio/{}.{}", uuid::Uuid::new_v4(), extension);
-        let target = app
-            .path()
-            .app_data_dir()
-            .map_err(|error| error.to_string())?
-            .join("resources")
-            .join(&resource_id);
+        let resource_id = audio::import_package_resource(&app, &package_resource, bytes)?;
+        let target = audio::resource_path(&app, &resource_id)?;
         animation.audio.resource_id = Some(resource_id);
-        managed_resource = Some((target, bytes));
+        managed_resource = Some(target);
     }
     let mut next = state.config.get();
     if next
@@ -944,16 +951,10 @@ fn animation_import_inner(
     }
     next.animations.push(animation);
     settings::validate_config(&next)?;
-    if let Some((target, bytes)) = &managed_resource {
-        if let Some(parent) = target.parent() {
-            std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
-        }
-        std::fs::write(target, bytes).map_err(|error| format!("保存动画音效失败: {error}"))?;
-    }
     match state.config.replace(next) {
         Ok(config) => Ok(config),
         Err(error) => {
-            if let Some((target, _)) = managed_resource {
+            if let Some(target) = managed_resource {
                 let _ = std::fs::remove_file(target);
             }
             Err(error)
@@ -963,31 +964,12 @@ fn animation_import_inner(
 
 #[tauri::command]
 fn audio_import(app: AppHandle, path: String) -> Result<String, String> {
-    let source = PathBuf::from(&path);
-    let metadata = std::fs::metadata(&source).map_err(|error| format!("读取音效失败: {error}"))?;
-    if metadata.len() > 8 * 1024 * 1024 {
-        return Err("音效文件不能超过 8 MB".into());
-    }
-    let extension = source
-        .extension()
-        .and_then(|value| value.to_str())
-        .unwrap_or_default()
-        .to_ascii_lowercase();
-    if !["wav", "mp3", "ogg"].contains(&extension.as_str()) {
-        return Err("仅支持 WAV、MP3 和 OGG 音效".into());
-    }
-    let id = format!("audio/{}.{}", uuid::Uuid::new_v4(), extension);
-    let target = app
-        .path()
-        .app_data_dir()
-        .map_err(|error| error.to_string())?
-        .join("resources")
-        .join(&id);
-    if let Some(parent) = target.parent() {
-        std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
-    }
-    std::fs::copy(source, &target).map_err(|error| format!("保存音效失败: {error}"))?;
-    Ok(id)
+    audio::import_file(&app, &PathBuf::from(path))
+}
+
+#[tauri::command]
+fn audio_library_list(app: AppHandle) -> Result<Vec<audio::AudioLibraryItem>, String> {
+    audio::list_library(&app)
 }
 
 #[tauri::command]

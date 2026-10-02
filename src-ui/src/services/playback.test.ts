@@ -12,14 +12,15 @@ const request: PlaybackRequest = {
   animation: {
     id: "success", kind: "builtin", name: "Success", description: "", command: "success", aliases: [], enabled: true,
     renderer: "badge", durationMs: 2000, target: "all", colors: ["#34c584"], options: {},
-    audio: { enabled: true, resourceId: "builtin/completion-success.wav", delayMs: 120, volume: 0.7 },
+    audio: { enabled: true, resourceId: "audio/completion-success.wav", delayMs: 120, volume: 0.7 },
   },
 };
 
 describe("audio scheduling", () => {
-  it("uses one built-in audio source with configured delay", () => expect(audioSchedule(request)).toEqual({ shouldPlay: true, source: "/audio/completion-success.wav", delayMs: 120, volume: 0.7 }));
+  it("uses host-provided data URLs with configured delay", () => expect(audioSchedule({ ...request, audioDataUrl: "data:audio/wav;base64,AA==" })).toEqual({ shouldPlay: true, source: "data:audio/wav;base64,AA==", delayMs: 120, volume: 0.7 }));
   it("prefers host-provided data URLs for packaged playback", () => expect(audioSchedule({ ...request, audioDataUrl: "data:audio/wav;base64,AA==" }).source).toBe("data:audio/wav;base64,AA=="));
-  it("maps any built-in audio resource to packaged audio", () => expect(audioSchedule({ ...request, animation: { ...request.animation, audio: { ...request.animation.audio, resourceId: "builtin/soft-chime.wav" } } }).source).toBe("/audio/soft-chime.wav"));
+  it("keeps legacy built-in audio resources loadable from packaged audio", () => expect(audioSchedule({ ...request, animation: { ...request.animation, audio: { ...request.animation.audio, resourceId: "builtin/soft-chime.wav" } } }).source).toBe("/audio/soft-chime.wav"));
+  it("falls back to packaged audio paths for managed built-in resources", () => expect(audioSchedule(request).source).toBe("/audio/completion-success.wav"));
   it("honors host mute decision", () => expect(audioSchedule({ ...request, playAudio: false }).shouldPlay).toBe(false));
 });
 

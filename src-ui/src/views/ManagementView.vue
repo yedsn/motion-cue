@@ -2,16 +2,10 @@
 import { computed, onMounted, onUnmounted, reactive, ref } from "vue";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { Activity, Ban, Box, ChevronRight, CirclePlay, Download, Minus, PackagePlus, Plus, RotateCcw, Save, Settings2, Sparkles, Square, Trash2, Upload, X } from "lucide-vue-next";
-import { checkAppUpdate, deleteAnimation, downloadAndInstallUpdate, exportAnimation, getAppVersion, getAudioResource, getConfig, getDiagnostics, importAnimation, importAudio, installPlugin, onAppUpdateCheckRequest, onAppUpdateEvent, previewAnimation, resetAnimation, restartApp, saveAnimation, setPluginEnabled, stopAnimations, uninstallPlugin, updateSettings } from "../services/tauri";
+import { Activity, Ban, Box, ChevronRight, CirclePlay, Copy, Download, Minus, PackagePlus, Plus, RotateCcw, Save, Settings2, Sparkles, Square, Terminal, Trash2, Upload, X } from "lucide-vue-next";
+import { checkAppUpdate, deleteAnimation, downloadAndInstallUpdate, exportAnimation, getAppVersion, getAudioResource, getConfig, getDiagnostics, importAnimation, importAudio, installPlugin, listAudioLibrary, onAppUpdateCheckRequest, onAppUpdateEvent, previewAnimation, resetAnimation, restartApp, saveAnimation, setPluginEnabled, stopAnimations, uninstallPlugin, updateSettings } from "../services/tauri";
 import { validateAnimation } from "../services/schemas";
-import type { AnimationDefinition, AppConfig, AppUpdateCheckResult, DiagnosticEntry } from "../types";
-
-const builtinAudioOptions = [
-  { id: "builtin/completion-success.wav", name: "完成提示" },
-  { id: "builtin/soft-chime.wav", name: "柔和铃声" },
-  { id: "builtin/bright-pop.wav", name: "明亮弹跳" },
-];
+import type { AnimationDefinition, AppConfig, AppUpdateCheckResult, AudioLibraryItem, DiagnosticEntry, RendererKind } from "../types";
 const transitionOptions = [
   { value: "__global__", label: "全局默认" },
   { value: "none", label: "无" },
@@ -20,6 +14,14 @@ const transitionOptions = [
   { value: "slide-up", label: "上滑" },
 ] as const;
 const frameRateOptions = [30, 45, 60];
+const rendererOptions: RendererKind[] = ["confetti", "badge", "pulse", "ring", "shake", "completion", "material-flow", "corner-fireworks", "focus-spotlight"];
+const cornerOptions = [
+  { value: "top-left", label: "左上" },
+  { value: "top-right", label: "右上" },
+  { value: "bottom-left", label: "左下" },
+  { value: "bottom-right", label: "右下" },
+];
+const optionKeys = ["particleCount", "particleSize", "angle", "intensity", "speed", "density", "brightness", "spread", "burstCount", "corners", "spotlightSize", "dimAmount", "pulseStrength", "showText"];
 
 const config = ref<AppConfig>();
 const diagnostics = ref<DiagnosticEntry[]>([]);
@@ -27,7 +29,8 @@ const selectedId = ref("task-complete");
 const page = ref<"animations" | "plugins" | "settings" | "diagnostics">("animations");
 const message = ref("");
 const previewing = ref(false);
-const externalAudioSelected = ref(false);
+const showInvocationExamples = ref(false);
+const audioLibrary = ref<AudioLibraryItem[]>([]);
 const appVersion = ref("");
 const updateChecking = ref(false);
 const updateInstalling = ref(false);
@@ -43,35 +46,114 @@ const selected = computed(() => config.value?.animations.find((animation) => ani
 const plugins = computed(() => config.value?.plugins ?? []);
 const validation = computed(() => validateAnimation(draft));
 const hasAudio = computed(() => Boolean(draft.audio.resourceId));
-const isExternalAudio = computed(() => externalAudioSelected.value || (draft.audio.resourceId?.startsWith("audio/") ?? false));
 const audioSelection = computed({
-  get: () => draft.audio.resourceId?.startsWith("builtin/") ? draft.audio.resourceId : isExternalAudio.value ? "__external__" : "",
+  get: () => draft.audio.resourceId ?? "",
   set: (value: string) => { void setAudioSelection(value); },
 });
 const enterTransitionSelection = computed({ get: () => draft.transition?.enter ?? "__global__", set: (value: string) => setTransitionValue("enter", value) });
 const exitTransitionSelection = computed({ get: () => draft.transition?.exit ?? "__global__", set: (value: string) => setTransitionValue("exit", value) });
+const invocationExamples = computed(() => {
+  const command = draft.command.trim() || "animation-command";
+  const encodedCommand = encodeURIComponent(command);
+  const cliCommand = formatCliArg(command);
+  const text = draft.text?.trim() || "完成";
+  const color = draft.colors[0] || "#c9ef8f";
+  const duration = Number.isFinite(draft.durationMs) ? draft.durationMs : 3000;
+  return [
+    { title: "链接播放", value: `motioncue://play/${encodedCommand}` },
+    { title: "链接播放并覆盖文字", value: `motioncue://play/${encodedCommand}?text=${encodeURIComponent(text)}` },
+    { title: "链接播放并覆盖文字和颜色", value: `motioncue://play/${encodedCommand}?text=${encodeURIComponent(text)}&color=${encodeURIComponent(color)}` },
+    { title: "链接 command 参数形式", value: `motioncue://play?command=${encodedCommand}&text=${encodeURIComponent(text)}` },
+    { title: "命令行播放", value: `motion-cue play ${cliCommand}` },
+    { title: "命令行播放并覆盖文字", value: `motion-cue play ${cliCommand} --text ${formatCliArg(text)}` },
+    { title: "命令行播放并指定时长", value: `motion-cue play ${cliCommand} --duration ${duration}` },
+    { title: "命令行播放并指定颜色", value: `motion-cue play ${cliCommand} --color ${formatCliArg(color)}` },
+    { title: "停止全部动画", value: "motion-cue stop" },
+    { title: "打开主界面", value: "motion-cue open" },
+    { title: "列出动画", value: "motion-cue list --json" },
+  ];
+});
 
 function defaultTransition() {
   return { enter: "fade" as const, exit: "fade" as const, enterMs: 180, exitMs: 420 };
 }
 
 function emptyAnimation(): AnimationDefinition {
-  return { id: crypto.randomUUID(), kind: "configured", name: "新动画", description: "自定义动画", command: "new-animation", aliases: [], enabled: true, renderer: "confetti", durationMs: config.value?.settings.defaultDurationMs ?? 3000, target: config.value?.settings.defaultTarget ?? "all", text: "完成", colors: ["#c9ef8f", "#91f5d4"], options: { particleCount: 100, angle: 58 }, audio: { enabled: false, volume: config.value?.settings.defaultVolume ?? 0.6, delayMs: 0 } };
+  return { id: crypto.randomUUID(), kind: "configured", name: "新动画", description: "自定义动画", command: "new-animation", aliases: [], enabled: true, renderer: "confetti", durationMs: config.value?.settings.defaultDurationMs ?? 3000, target: config.value?.settings.defaultTarget ?? "all", text: "完成", colors: ["#c9ef8f", "#91f5d4"], options: { particleCount: 100, particleSize: 1, angle: 58 }, audio: { enabled: false, volume: config.value?.settings.defaultVolume ?? 0.6, delayMs: 0 } };
+}
+
+function defaultOptions(renderer: RendererKind): Record<string, unknown> {
+  if (renderer === "confetti" || renderer === "completion") return { particleCount: 100, particleSize: 1, angle: 58 };
+  if (renderer === "corner-fireworks") return { particleCount: 72, particleSize: 1, burstCount: 4, spread: 72, speed: 1, corners: ["bottom-left", "bottom-right"] };
+  if (renderer === "material-flow") return { intensity: .72, speed: .8, density: 120, brightness: .72 };
+  if (renderer === "focus-spotlight") return { spotlightSize: .42, dimAmount: .38, pulseStrength: .28, showText: true };
+  return {};
+}
+
+function applyRendererDefaults() {
+  const defaults = defaultOptions(draft.renderer);
+  for (const key of optionKeys) {
+    if (!(key in defaults)) delete draft.options[key];
+  }
+  Object.assign(draft.options, defaults, draft.options);
+}
+
+function ensureRendererDefaults() {
+  Object.assign(draft.options, defaultOptions(draft.renderer), draft.options);
+}
+
+function clampOption(key: string, min: number, max: number, fallback: number) {
+  const value = Number(draft.options[key]);
+  const next = Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : fallback;
+  draft.options[key] = Number(next.toFixed(2));
+}
+
+function formatCliArg(value: string) {
+  if (!/[\s"]/.test(value)) return value;
+  return `"${value.replace(/"/g, '\\"')}"`;
+}
+
+async function copyInvocationExample(value: string) {
+  try {
+    await navigator.clipboard.writeText(value);
+    message.value = "调用示例已复制";
+  } catch {
+    message.value = "请手动复制调用示例";
+  }
+}
+
+function cornerChecked(value: string) {
+  return Array.isArray(draft.options.corners) && draft.options.corners.includes(value);
+}
+
+function setCorner(value: string, checked: boolean) {
+  const current = Array.isArray(draft.options.corners) ? draft.options.corners.filter((item): item is string => typeof item === "string") : [];
+  const next = checked ? Array.from(new Set([...current, value])) : current.filter((item) => item !== value);
+  draft.options.corners = next.length ? next : ["bottom-left"];
 }
 
 function cloneAnimation(animation: AnimationDefinition): AnimationDefinition {
   return JSON.parse(JSON.stringify(animation)) as AnimationDefinition;
 }
 
+function normalizeAudioResourceId(resourceId?: string) {
+  if (resourceId === "builtin/completion-success.wav") return "audio/completion-success.wav";
+  if (resourceId === "builtin/soft-chime.wav") return "audio/soft-chime.wav";
+  if (resourceId === "builtin/bright-pop.wav") return "audio/bright-pop.wav";
+  return resourceId;
+}
+
 function edit(animation?: AnimationDefinition) {
   const next = cloneAnimation(animation ?? emptyAnimation());
+  next.audio.resourceId = normalizeAudioResourceId(next.audio.resourceId);
   Object.assign(draft, next);
-  externalAudioSelected.value = next.audio.resourceId?.startsWith("audio/") ?? false;
+  ensureRendererDefaults();
   if (!next.transition) delete draft.transition;
 }
 
 async function reload() {
   config.value = await getConfig();
+  audioLibrary.value = await listAudioLibrary();
   config.value.settings.overlayTopmost ??= true;
   config.value.settings.targetFrameRate ??= 60;
   config.value.settings.defaultTransition ??= defaultTransition();
@@ -145,7 +227,10 @@ async function install() {
 
 async function importPack() {
   const path = await open({ multiple: false, filters: [{ name: "MotionCue Animation", extensions: ["mca", "zip"] }] });
-  if (typeof path === "string") config.value = await importAnimation(path);
+  if (typeof path === "string") {
+    config.value = await importAnimation(path);
+    audioLibrary.value = await listAudioLibrary();
+  }
 }
 
 async function exportPack() {
@@ -155,34 +240,28 @@ async function exportPack() {
 }
 
 async function chooseAudio() {
-  const path = await open({ multiple: false, filters: [{ name: "Audio", extensions: ["wav", "mp3", "ogg"] }] });
+  const path = await open({ multiple: false, filters: [{ name: "Audio", extensions: ["wav", "mp3", "ogg", "flac"] }] });
   if (typeof path === "string") {
     draft.audio.resourceId = await importAudio(path);
+    audioLibrary.value = await listAudioLibrary();
     draft.audio.enabled = true;
-    externalAudioSelected.value = true;
     await previewSelectedAudio(draft.audio.resourceId);
   }
 }
 
 async function setAudioSelection(value: string) {
-  if (value === "__external__") {
+  if (value === "__import__") {
     const previousResourceId = draft.audio.resourceId;
     await chooseAudio();
     if (!draft.audio.resourceId) {
-      externalAudioSelected.value = false;
       draft.audio.resourceId = previousResourceId;
       draft.audio.enabled = Boolean(previousResourceId);
     }
     return;
   }
-  useBuiltinAudio(value);
-}
-
-function useBuiltinAudio(resourceId: string) {
-  externalAudioSelected.value = false;
-  draft.audio.resourceId = resourceId || undefined;
-  draft.audio.enabled = Boolean(resourceId);
-  if (resourceId) void previewSelectedAudio(resourceId);
+  draft.audio.resourceId = value || undefined;
+  draft.audio.enabled = Boolean(value);
+  if (value) void previewSelectedAudio(value);
 }
 
 async function previewSelectedAudio(resourceId = draft.audio.resourceId) {
@@ -331,7 +410,6 @@ onUnmounted(() => {
         <button :class="{ active: page === 'settings' }" @click="page = 'settings'"><Settings2 :size="17" />全局设置</button>
         <button :class="{ active: page === 'diagnostics' }" @click="page = 'diagnostics'; loadDiagnostics()"><Activity :size="17" />诊断</button>
       </nav>
-      <section class="callout"><small>外部调用</small><code>motioncue://play/task-complete</code><code>motion-cue play success</code></section>
     </aside>
 
     <section v-if="page === 'animations' && config" class="workspace">
@@ -344,20 +422,39 @@ onUnmounted(() => {
           </button>
         </div>
         <form class="editor-card" @submit.prevent="saveDraft">
-          <div class="editor-preview"><span :style="{ '--preview-color': draft.colors[0] }"><Sparkles :size="28" /></span><div><small>实时预览</small><strong>{{ draft.text || draft.name }}</strong></div><button type="button" :disabled="previewing" @click="preview()"><CirclePlay :size="15" />{{ previewing ? '播放中' : '播放' }}</button></div>
+          <div class="editor-preview"><span :style="{ '--preview-color': draft.colors[0] }"><Sparkles :size="28" /></span><div><small>实时预览</small><strong>{{ draft.text || draft.name }}</strong></div><button type="button" :disabled="previewing" @click="preview()"><CirclePlay :size="15" />{{ previewing ? '播放中' : '播放' }}</button><button type="button" @click="showInvocationExamples = true"><Terminal :size="15" />调用示例</button></div>
           <div class="form-grid">
             <label>名称<input v-model="draft.name" /></label>
             <label>调用命令<input v-model="draft.command" /></label>
             <label class="span-2">命令别名（逗号分隔）<input :value="draft.aliases.join(', ')" @input="draft.aliases = ($event.target as HTMLInputElement).value.split(',').map(value => value.trim()).filter(Boolean)" /></label>
-            <label>渲染器<select v-model="draft.renderer"><option v-for="renderer in ['confetti','badge','pulse','ring','shake','completion']" :key="renderer">{{ renderer }}</option></select></label>
+            <label>渲染器<select v-model="draft.renderer" @change="applyRendererDefaults"><option v-for="renderer in rendererOptions" :key="renderer">{{ renderer }}</option></select></label>
             <label>目标显示器<select v-model="draft.target"><option value="all">全部显示器</option><option value="primary">主显示器</option></select></label>
             <label class="span-2">说明<input v-model="draft.description" /></label>
             <label class="span-2">展示文字<input v-model="draft.text" maxlength="200" /></label>
             <label>持续时间（毫秒）<input v-model.number="draft.durationMs" type="number" min="100" max="60000" /></label>
-            <label>粒子数量<input v-model.number="draft.options.particleCount" type="number" min="1" max="500" /></label>
-            <label>喷发方向（角度）<input v-model.number="draft.options.angle" type="number" min="0" max="180" /></label>
+            <label v-if="['confetti','completion','corner-fireworks'].includes(draft.renderer)">粒子数量<input v-model.number="draft.options.particleCount" type="number" min="1" max="500" /></label>
+            <label v-if="['confetti','completion','corner-fireworks'].includes(draft.renderer)">粒子大小<input v-model.number="draft.options.particleSize" type="number" min="0.4" max="2.5" step="0.1" @change="clampOption('particleSize', 0.4, 2.5, 1)" /></label>
+            <label v-if="['confetti','completion'].includes(draft.renderer)">喷发方向（角度）<input v-model.number="draft.options.angle" type="number" min="0" max="180" /></label>
+            <template v-if="draft.renderer === 'material-flow'">
+              <label>材质强度<input v-model.number="draft.options.intensity" type="range" min="0" max="1" step="0.05" /></label>
+              <label>流动速度<input v-model.number="draft.options.speed" type="number" min="0.1" max="3" step="0.1" /></label>
+              <label>粒子密度<input v-model.number="draft.options.density" type="number" min="1" max="300" /></label>
+              <label>材质亮度<input v-model.number="draft.options.brightness" type="range" min="0" max="1" step="0.05" /></label>
+            </template>
+            <template v-if="draft.renderer === 'corner-fireworks'">
+              <label>烟花批次<input v-model.number="draft.options.burstCount" type="number" min="1" max="12" /></label>
+              <label>扩散范围<input v-model.number="draft.options.spread" type="number" min="1" max="180" /></label>
+              <label>发射速度<input v-model.number="draft.options.speed" type="number" min="0.1" max="3" step="0.1" /></label>
+              <label class="span-2 option-checks">发射角落<span><label v-for="corner in cornerOptions" :key="corner.value"><input type="checkbox" :checked="cornerChecked(corner.value)" @change="setCorner(corner.value, ($event.target as HTMLInputElement).checked)" />{{ corner.label }}</label></span></label>
+            </template>
+            <template v-if="draft.renderer === 'focus-spotlight'">
+              <label>光罩大小<input v-model.number="draft.options.spotlightSize" type="range" min="0.1" max="1" step="0.05" /></label>
+              <label>压暗程度<input v-model.number="draft.options.dimAmount" type="range" min="0" max="0.75" step="0.05" /></label>
+              <label>呼吸强度<input v-model.number="draft.options.pulseStrength" type="range" min="0" max="1" step="0.05" /></label>
+              <label class="switch"><input v-model="draft.options.showText" type="checkbox" />显示文字提示</label>
+            </template>
             <label>主题颜色<input v-model="draft.colors[0]" type="color" /></label>
-            <label class="audio-source">音效来源<span><select v-model="audioSelection"><option value="">不选择</option><option v-for="audio in builtinAudioOptions" :key="audio.id" :value="audio.id">内置 · {{ audio.name }}</option><option value="__external__">外置音效</option></select><button type="button" :disabled="!hasAudio" title="试听音效" @click="previewSelectedAudio()"><CirclePlay :size="14" /></button></span></label>
+            <label class="audio-source">音效来源<span><select v-model="audioSelection"><option value="">不选择</option><option v-for="audio in audioLibrary" :key="audio.resourceId" :value="audio.resourceId">{{ audio.builtIn ? '内置' : '音效库' }} · {{ audio.name }}</option><option value="__import__">导入音效...</option></select><button type="button" :disabled="!hasAudio" title="试听音效" @click="previewSelectedAudio()"><CirclePlay :size="14" /></button></span></label>
             <label>音量<input v-model.number="draft.audio.volume" type="range" min="0" max="1" step="0.05" /></label>
             <label>音效延迟<input v-model.number="draft.audio.delayMs" type="number" min="0" :max="draft.durationMs" /></label>
             <label>开始效果<select v-model="enterTransitionSelection"><option v-for="option in transitionOptions" :key="option.value" :value="option.value">{{ option.label }}</option></select></label>
@@ -404,6 +501,14 @@ onUnmounted(() => {
     </section>
 
     <section v-else class="workspace"><header class="workspace-header"><div><small>DIAGNOSTICS</small><h1>诊断记录</h1><p>默认不保存完整外部文字参数。</p></div><button @click="loadDiagnostics"><RotateCcw :size="14" />刷新</button></header><div class="diagnostic-list"><article v-for="entry in diagnostics" :key="entry.id" :class="entry.level"><time>{{ new Date(entry.timestamp).toLocaleString() }}</time><strong>{{ entry.category }}</strong><span>{{ entry.message }}</span><code v-if="entry.command">{{ entry.command }}</code></article><div v-if="!diagnostics.length" class="empty"><Activity :size="34" /><strong>暂无诊断记录</strong></div></div></section>
+    <div v-if="showInvocationExamples" class="modal-backdrop" @click.self="showInvocationExamples = false">
+      <section class="example-modal" role="dialog" aria-modal="true" aria-labelledby="invocation-examples-title">
+        <header><div><small>EXAMPLES</small><h2 id="invocation-examples-title">调用示例</h2></div><button type="button" aria-label="关闭" @click="showInvocationExamples = false"><X :size="15" /></button></header>
+        <div class="example-list">
+          <label v-for="example in invocationExamples" :key="example.title" class="example-row">{{ example.title }}<span><input :value="example.value" readonly /><button type="button" title="复制" @click="copyInvocationExample(example.value)"><Copy :size="14" /></button></span></label>
+        </div>
+      </section>
+    </div>
     <div v-if="message" class="toast" @animationend="message = ''">{{ message }}</div>
   </main>
 </template>

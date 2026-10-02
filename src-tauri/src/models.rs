@@ -49,6 +49,9 @@ pub enum RendererKind {
     Ring,
     Shake,
     Completion,
+    MaterialFlow,
+    CornerFireworks,
+    FocusSpotlight,
     Plugin,
 }
 
@@ -235,7 +238,7 @@ mod tests {
         let decoded: AppConfig =
             serde_json::from_value(serde_json::to_value(&config).unwrap()).unwrap();
         assert_eq!(decoded.schema_version, SCHEMA_VERSION);
-        assert_eq!(decoded.animations.len(), 7);
+        assert_eq!(decoded.animations.len(), 9);
 
         let request = InvocationRequest {
             schema_version: SCHEMA_VERSION,
