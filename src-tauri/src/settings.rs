@@ -2,7 +2,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::RwLock;
 
-use crate::catalog::{builtins, command_index, default_config, validate_animation, validate_transition};
+use crate::catalog::{
+    builtins, command_index, default_config, validate_animation, validate_transition,
+};
 use crate::models::{AppConfig, SCHEMA_VERSION};
 
 pub struct ConfigStore {
@@ -140,7 +142,9 @@ fn read_valid(path: &Path) -> Result<AppConfig, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::{AnimationDefinition, AnimationKind, AudioConfig, MonitorTarget, RendererKind};
+    use crate::models::{
+        AnimationDefinition, AnimationKind, AudioConfig, MonitorTarget, RendererKind,
+    };
 
     #[test]
     fn rejects_future_schema() {
@@ -198,9 +202,12 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("config.json");
         let mut config = default_config();
-        config
-            .animations
-            .retain(|animation| !matches!(animation.id.as_str(), "material-flow" | "corner-fireworks" | "focus-spotlight"));
+        config.animations.retain(|animation| {
+            !matches!(
+                animation.id.as_str(),
+                "material-flow" | "corner-fireworks" | "focus-spotlight"
+            )
+        });
         config.animations.push(AnimationDefinition {
             id: "milestone".into(),
             kind: AnimationKind::Builtin,

@@ -168,7 +168,10 @@ fn default_options(renderer: &RendererKind) -> serde_json::Map<String, serde_jso
             options.insert("burstCount".into(), serde_json::json!(4));
             options.insert("spread".into(), serde_json::json!(72));
             options.insert("speed".into(), serde_json::json!(1.0));
-            options.insert("corners".into(), serde_json::json!(["bottom-left", "bottom-right"]));
+            options.insert(
+                "corners".into(),
+                serde_json::json!(["bottom-left", "bottom-right"]),
+            );
         }
         RendererKind::MaterialFlow => {
             options.insert("intensity".into(), serde_json::json!(0.72));
@@ -182,7 +185,11 @@ fn default_options(renderer: &RendererKind) -> serde_json::Map<String, serde_jso
             options.insert("pulseStrength".into(), serde_json::json!(0.28));
             options.insert("showText".into(), serde_json::json!(true));
         }
-        RendererKind::Badge | RendererKind::Pulse | RendererKind::Ring | RendererKind::Shake | RendererKind::Plugin => {}
+        RendererKind::Badge
+        | RendererKind::Pulse
+        | RendererKind::Ring
+        | RendererKind::Shake
+        | RendererKind::Plugin => {}
     }
     options
 }
@@ -237,9 +244,27 @@ pub fn validate_animation(animation: &AnimationDefinition) -> Result<(), String>
 }
 
 fn validate_options(animation: &AnimationDefinition) -> Result<(), String> {
-    validate_number_option(animation, "particleCount", 1.0, 500.0, "粒子数量必须在 1 到 500 之间")?;
-    validate_number_option(animation, "particleSize", 0.4, 2.5, "粒子大小必须在 0.4 到 2.5 之间")?;
-    validate_number_option(animation, "angle", 0.0, 180.0, "喷发方向必须在 0 到 180 度之间")?;
+    validate_number_option(
+        animation,
+        "particleCount",
+        1.0,
+        500.0,
+        "粒子数量必须在 1 到 500 之间",
+    )?;
+    validate_number_option(
+        animation,
+        "particleSize",
+        0.4,
+        2.5,
+        "粒子大小必须在 0.4 到 2.5 之间",
+    )?;
+    validate_number_option(
+        animation,
+        "angle",
+        0.0,
+        180.0,
+        "喷发方向必须在 0 到 180 度之间",
+    )?;
     match animation.renderer {
         RendererKind::MaterialFlow => {
             validate_number_option(animation, "intensity", 0.0, 1.0, "强度必须在 0 到 1 之间")?;
@@ -248,15 +273,45 @@ fn validate_options(animation: &AnimationDefinition) -> Result<(), String> {
             validate_number_option(animation, "brightness", 0.0, 1.0, "亮度必须在 0 到 1 之间")?;
         }
         RendererKind::CornerFireworks => {
-            validate_number_option(animation, "burstCount", 1.0, 12.0, "烟花批次必须在 1 到 12 之间")?;
-            validate_number_option(animation, "spread", 1.0, 180.0, "扩散范围必须在 1 到 180 之间")?;
+            validate_number_option(
+                animation,
+                "burstCount",
+                1.0,
+                12.0,
+                "烟花批次必须在 1 到 12 之间",
+            )?;
+            validate_number_option(
+                animation,
+                "spread",
+                1.0,
+                180.0,
+                "扩散范围必须在 1 到 180 之间",
+            )?;
             validate_number_option(animation, "speed", 0.1, 3.0, "速度必须在 0.1 到 3 之间")?;
             validate_corners(animation)?;
         }
         RendererKind::FocusSpotlight => {
-            validate_number_option(animation, "spotlightSize", 0.1, 1.0, "光罩大小必须在 0.1 到 1 之间")?;
-            validate_number_option(animation, "dimAmount", 0.0, 0.75, "压暗程度必须在 0 到 0.75 之间")?;
-            validate_number_option(animation, "pulseStrength", 0.0, 1.0, "呼吸强度必须在 0 到 1 之间")?;
+            validate_number_option(
+                animation,
+                "spotlightSize",
+                0.1,
+                1.0,
+                "光罩大小必须在 0.1 到 1 之间",
+            )?;
+            validate_number_option(
+                animation,
+                "dimAmount",
+                0.0,
+                0.75,
+                "压暗程度必须在 0 到 0.75 之间",
+            )?;
+            validate_number_option(
+                animation,
+                "pulseStrength",
+                0.0,
+                1.0,
+                "呼吸强度必须在 0 到 1 之间",
+            )?;
             if let Some(value) = animation.options.get("showText") {
                 if !value.is_boolean() {
                     return Err("文字显示开关必须为布尔值".into());
@@ -275,8 +330,12 @@ fn validate_number_option(
     max: f64,
     message: &str,
 ) -> Result<(), String> {
-    let Some(value) = animation.options.get(key) else { return Ok(()); };
-    let Some(number) = value.as_f64() else { return Err(message.into()); };
+    let Some(value) = animation.options.get(key) else {
+        return Ok(());
+    };
+    let Some(number) = value.as_f64() else {
+        return Err(message.into());
+    };
     if number < min || number > max {
         return Err(message.into());
     }
@@ -284,8 +343,12 @@ fn validate_number_option(
 }
 
 fn validate_corners(animation: &AnimationDefinition) -> Result<(), String> {
-    let Some(value) = animation.options.get("corners") else { return Ok(()); };
-    let Some(items) = value.as_array() else { return Err("发射角落配置无效".into()); };
+    let Some(value) = animation.options.get("corners") else {
+        return Ok(());
+    };
+    let Some(items) = value.as_array() else {
+        return Err("发射角落配置无效".into());
+    };
     if items.is_empty() || items.len() > 4 {
         return Err("发射角落配置无效".into());
     }

@@ -40,4 +40,49 @@
 - 覆盖窗口默认显示在最顶层；用户可在全局设置中关闭最顶层显示。关闭后动画仍保持鼠标穿透和不抢焦点，但可被其他应用窗口盖住。
 - 插件对网络、外部导航、弹窗、文件、宿主桥接、共享存储和未声明 WebGL/Worker 能力采用宿主策略阻断；CPU/GPU 配额不作跨设备精确承诺。
 
+## macOS 管理窗口与 Dock 生命周期验收
+
+本节用于 `manage-macos-dock-visibility` 变更的实机验收。必须在真实 macOS 桌面环境执行；无界面测试和 Windows 环境不能替代 Dock 与菜单栏观察。
+
+记录环境：
+
+- 日期：待填写
+- macOS 版本：待填写
+- 处理器：待填写（Apple Silicon / Intel）
+- MotionCue 版本或提交：待填写
+
+在 Mac 源码目录中构建并启动：
+
+```bash
+npm ci
+npm test
+cargo test --manifest-path src-tauri/Cargo.toml
+npm run tauri:build -- --bundles app,dmg
+xattr -cr src-tauri/target/release/bundle/macos/MotionCue.app
+open src-tauri/target/release/bundle/macos/MotionCue.app
+```
+
+下文中的 CLI 命令可直接使用应用包内可执行文件：
+
+```bash
+MOTION_CUE_BIN="$PWD/src-tauri/target/release/bundle/macos/MotionCue.app/Contents/MacOS/motion-cue"
+"$MOTION_CUE_BIN" open
+"$MOTION_CUE_BIN" play success
+```
+
+验收步骤：
+
+- [ ] 从 Finder 或 Launchpad 正常启动 MotionCue，确认管理窗口、菜单栏图标和 Dock 图标同时显示，且可以通过 Dock 返回窗口。
+- [ ] 点击管理窗口关闭按钮，确认应用没有退出、管理窗口消失、Dock 图标消失，并且菜单栏图标仍然存在。
+- [ ] 点击菜单栏图标或“打开 MotionCue”，确认 Dock 图标恢复，原管理窗口显示并获得焦点，没有创建第二个实例。
+- [ ] 关闭管理窗口后从菜单栏选择“检查更新”，确认 Dock 图标和管理窗口先恢复，再显示检查更新结果。
+- [ ] 关闭管理窗口后执行 `motion-cue open`，确认 Dock 图标恢复并聚焦同一管理窗口。
+- [ ] 在应用已运行且窗口隐藏时再次从 Finder 或 Launchpad 启动，确认现有实例的 Dock 图标与管理窗口恢复，不出现第二套菜单栏图标。
+- [ ] 完全退出 MotionCue 后执行一次有效的后台播放调用，确认仅出现菜单栏图标和动画覆盖层，不出现管理窗口或 Dock 图标。
+- [ ] 后台运行期间再次触发普通动画，确认动画播放不会自动显示管理窗口或 Dock 图标。
+- [ ] 连续至少 10 次执行“关闭窗口 -> 立即从菜单栏重新打开”，确认没有重复 Dock 图标、窗口失焦或只剩后台进程但无法打开的状态。
+- [ ] 从菜单栏选择“退出”，确认进程、菜单栏图标和 Dock 图标均消失。
+
+验收结果：待填写（通过 / 失败，并附失败步骤、截图或录屏路径）。
+
 

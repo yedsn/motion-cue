@@ -10,6 +10,7 @@ use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_deep_link::DeepLinkExt;
 use tauri_plugin_updater::UpdaterExt;
 
+mod app_lifecycle;
 mod audio;
 mod catalog;
 mod diagnostics;
@@ -19,6 +20,7 @@ mod playback;
 mod plugins;
 mod settings;
 
+use app_lifecycle::ManagementWindowEvent;
 use catalog::public_command_list;
 use diagnostics::Diagnostics;
 use invocation::{
@@ -146,11 +148,23 @@ fn configure_webview_rendering() {
 }
 
 fn cli_endpoint_path() -> PathBuf {
-    let app_data = std::env::var_os("APPDATA")
+    let app_data = cli_app_data_dir();
+    invocation::endpoint_path(&app_data)
+}
+
+#[cfg(target_os = "windows")]
+fn cli_app_data_dir() -> PathBuf {
+    std::env::var_os("APPDATA")
         .map(PathBuf::from)
         .unwrap_or_else(std::env::temp_dir)
-        .join("com.motioncue.desktop");
-    invocation::endpoint_path(&app_data)
+        .join("com.motioncue.desktop")
+}
+
+#[cfg(not(target_os = "windows"))]
+fn cli_app_data_dir() -> PathBuf {
+    directories::ProjectDirs::from("", "", "com.motioncue.desktop")
+        .map(|directories| directories.data_dir().to_path_buf())
+        .unwrap_or_else(|| std::env::temp_dir().join("com.motioncue.desktop"))
 }
 
 fn forward_or_start(
@@ -191,9 +205,10 @@ fn run(initial_intent: LaunchIntent) -> Result<(), String> {
         .plugin(tauri_plugin_single_instance::init(
             move |app, args, _cwd| {
                 let command = match parse_launch_args(&args[1..]) {
-                    Ok(LaunchIntent::Forward(command)) => command,
-                    Ok(LaunchIntent::Gui) => IpcCommand::Open,
-                    Ok(LaunchIntent::Background) => return,
+                    Ok(intent) => match command_for_secondary_launch(intent) {
+                        Some(command) => command,
+                        None => return,
+                    },
                     Err(error) => {
                         app.state::<Diagnostics>()
                             .record("error", "invocation", error, None);
@@ -208,6 +223,13 @@ fn run(initial_intent: LaunchIntent) -> Result<(), String> {
             },
         ))
         .setup(move |app| {
+            let initial_intent = initial_intent_for_instance.lock().unwrap().take();
+            if matches!(initial_intent, Some(LaunchIntent::Background)) {
+                let _ = app_lifecycle::apply_dock_visibility(
+                    app.handle(),
+                    ManagementWindowEvent::BackgroundStartup,
+                );
+            }
             let data_dir = app
                 .path()
                 .app_data_dir()
@@ -259,17 +281,26 @@ fn run(initial_intent: LaunchIntent) -> Result<(), String> {
                     }
                 }
             });
-            if let Some(intent) = initial_intent_for_instance.lock().unwrap().take() {
+            if let Some(intent) = initial_intent {
                 match intent {
                     LaunchIntent::Forward(command) => {
                         let _ = handle_ipc(&app_handle, command);
                     }
                     LaunchIntent::Background => {
-                        if let Some(window) = app.get_webview_window("main") {
-                            let _ = window.hide();
+                        if let Err(error) = hide_management_window(
+                            &app_handle,
+                            ManagementWindowEvent::BackgroundStartup,
+                        ) {
+                            record_lifecycle_warning(&app_handle, error);
                         }
                     }
-                    LaunchIntent::Gui => {}
+                    LaunchIntent::Gui => {
+                        if let Err(error) =
+                            open_management_window(&app_handle, ManagementWindowEvent::GuiStartup)
+                        {
+                            record_lifecycle_warning(&app_handle, error);
+                        }
+                    }
                 }
             }
             Ok(())
@@ -306,10 +337,15 @@ fn run(initial_intent: LaunchIntent) -> Result<(), String> {
             app_open
         ])
         .on_window_event(|window, event| {
-            if window.label() == "main" {
+            if app_lifecycle::handles_window_lifecycle(window.label()) {
                 if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                     api.prevent_close();
-                    let _ = window.hide();
+                    let app = window.app_handle().clone();
+                    if let Err(error) =
+                        hide_management_window(&app, ManagementWindowEvent::CloseRequested)
+                    {
+                        record_lifecycle_warning(&app, error);
+                    }
                 }
             }
         })
@@ -342,33 +378,37 @@ fn setup_tray(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         )
         .menu(&menu)
         .tooltip("MotionCue");
-    tray.on_menu_event(|app, event| match event.id.as_ref() {
-        "open" => {
-            let _ = app_open(app.clone());
-        }
-        "check_update" => {
-            let _ = app_open(app.clone());
-            let _ = app.emit("motioncue://check-update", serde_json::json!({}));
-        }
-        "stop" => {
-            let _ = animation_stop_all(app.clone());
-        }
-        "mute" => {
-            let current = app.state::<AppState>().config.get();
-            if let Ok(config) = settings_update(
-                app.clone(),
-                models::GlobalSettings {
-                    muted: !current.settings.muted,
-                    ..current.settings
-                },
-            ) {
-                sync_tray_mute_checked(app, config.settings.muted);
+    tray.on_menu_event(|app, event| {
+        match app_lifecycle::tray_management_action(event.id.as_ref()) {
+            app_lifecycle::TrayManagementAction::Open => {
+                let _ = app_open(app.clone());
             }
+            app_lifecycle::TrayManagementAction::OpenAndCheckUpdate => {
+                let _ = app_open(app.clone());
+                let _ = app.emit("motioncue://check-update", serde_json::json!({}));
+            }
+            app_lifecycle::TrayManagementAction::None => match event.id.as_ref() {
+                "stop" => {
+                    let _ = animation_stop_all(app.clone());
+                }
+                "mute" => {
+                    let current = app.state::<AppState>().config.get();
+                    if let Ok(config) = settings_update(
+                        app.clone(),
+                        models::GlobalSettings {
+                            muted: !current.settings.muted,
+                            ..current.settings
+                        },
+                    ) {
+                        sync_tray_mute_checked(app, config.settings.muted);
+                    }
+                }
+                "quit" => {
+                    let _ = app.exit(0);
+                }
+                _ => {}
+            },
         }
-        "quit" => {
-            let _ = app.exit(0);
-        }
-        _ => {}
     })
     .on_tray_icon_event(|tray, event| {
         if matches!(
@@ -497,6 +537,14 @@ fn handle_ipc(app: &AppHandle, command: IpcCommand) -> IpcResponse {
                 .diagnostics
                 .list())),
         },
+    }
+}
+
+fn command_for_secondary_launch(intent: LaunchIntent) -> Option<IpcCommand> {
+    match intent {
+        LaunchIntent::Forward(command) => Some(command),
+        LaunchIntent::Gui => Some(IpcCommand::Open),
+        LaunchIntent::Background => None,
     }
 }
 
@@ -1138,10 +1186,78 @@ fn playback_error(app: AppHandle, session_id: String, message: String) -> Result
 
 #[tauri::command]
 fn app_open(app: AppHandle) -> Result<(), String> {
+    open_management_window(&app, ManagementWindowEvent::OpenRequested)
+}
+
+fn open_management_window(app: &AppHandle, event: ManagementWindowEvent) -> Result<(), String> {
+    let desired = app_lifecycle::desired_state(event);
+    debug_assert!(desired.window_visible);
+    if let Err(error) = app_lifecycle::apply_dock_visibility(app, event) {
+        record_lifecycle_warning(app, error);
+    }
     let window = app
         .get_webview_window("main")
         .ok_or_else(|| "管理窗口不存在".to_string())?;
     window.show().map_err(|error| error.to_string())?;
     window.unminimize().map_err(|error| error.to_string())?;
-    window.set_focus().map_err(|error| error.to_string())
+    if desired.focus_window {
+        window.set_focus().map_err(|error| error.to_string())?;
+    }
+    Ok(())
+}
+
+fn hide_management_window(app: &AppHandle, event: ManagementWindowEvent) -> Result<(), String> {
+    let desired = app_lifecycle::desired_state(event);
+    debug_assert!(!desired.window_visible);
+    let window = app
+        .get_webview_window("main")
+        .ok_or_else(|| "管理窗口不存在".to_string())?;
+    window.hide().map_err(|error| error.to_string())?;
+    app_lifecycle::apply_dock_visibility(app, event)
+}
+
+fn record_lifecycle_warning(app: &AppHandle, message: String) {
+    if let Some(state) = app.try_state::<AppState>() {
+        state
+            .diagnostics
+            .record("warning", "app-lifecycle", message, None);
+    }
+}
+
+#[cfg(test)]
+mod app_lifecycle_integration_tests {
+    use super::*;
+
+    #[test]
+    fn secondary_gui_launch_requests_the_existing_management_window() {
+        assert!(matches!(
+            command_for_secondary_launch(LaunchIntent::Gui),
+            Some(IpcCommand::Open)
+        ));
+    }
+
+    #[test]
+    fn secondary_background_launch_does_not_open_management_window() {
+        assert!(command_for_secondary_launch(LaunchIntent::Background).is_none());
+    }
+
+    #[test]
+    fn explicit_open_command_is_forwarded_to_the_shared_open_handler() {
+        let args = vec!["open".to_string()];
+        let intent = parse_launch_args(&args).unwrap();
+        assert!(matches!(
+            command_for_secondary_launch(intent),
+            Some(IpcCommand::Open)
+        ));
+    }
+
+    #[test]
+    fn playback_protocol_is_forwarded_without_becoming_an_open_request() {
+        let args = vec!["motioncue://play/success".to_string()];
+        let intent = parse_launch_args(&args).unwrap();
+        assert!(matches!(
+            command_for_secondary_launch(intent),
+            Some(IpcCommand::Play { .. })
+        ));
+    }
 }
