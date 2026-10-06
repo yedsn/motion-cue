@@ -198,7 +198,7 @@ fn forward_or_start(
 fn run(initial_intent: LaunchIntent) -> Result<(), String> {
     let initial_intent = Arc::new(std::sync::Mutex::new(Some(initial_intent)));
     let initial_intent_for_instance = initial_intent.clone();
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
@@ -349,8 +349,17 @@ fn run(initial_intent: LaunchIntent) -> Result<(), String> {
                 }
             }
         })
-        .run(tauri::generate_context!())
-        .map_err(|error| format!("MotionCue 运行失败: {error}"))
+        .build(tauri::generate_context!())
+        .map_err(|error| format!("MotionCue 运行失败: {error}"))?;
+    app.run(|_app, _event| {
+        #[cfg(target_os = "macos")]
+        if let tauri::RunEvent::Reopen { .. } = _event {
+            if let Err(error) = open_management_window(_app, ManagementWindowEvent::OpenRequested) {
+                record_lifecycle_warning(_app, error);
+            }
+        }
+    });
+    Ok(())
 }
 
 fn setup_tray(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
