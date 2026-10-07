@@ -137,9 +137,7 @@ impl PlaybackCoordinator {
         });
         for (index, label) in labels.into_iter().enumerate() {
             if let Some(window) = app.get_webview_window(&label) {
-                window
-                    .show()
-                    .map_err(|error| format!("显示覆盖窗口失败: {error}"))?;
+                show_overlay(&window)?;
                 apply_overlay_runtime_flags(&window, config.settings.overlay_topmost)?;
                 let mut window_request = request.clone();
                 window_request.play_audio = request.play_audio && index == 0;
@@ -363,6 +361,23 @@ impl PlaybackCoordinator {
         }
         Ok(labels)
     }
+}
+
+#[cfg(target_os = "macos")]
+fn show_overlay(window: &WebviewWindow) -> Result<(), String> {
+    window
+        .with_webview(|webview| {
+            let ns_window: &objc2_app_kit::NSWindow = unsafe { &*webview.ns_window().cast() };
+            ns_window.orderFrontRegardless();
+        })
+        .map_err(|error| format!("显示覆盖窗口失败: {error}"))
+}
+
+#[cfg(not(target_os = "macos"))]
+fn show_overlay(window: &WebviewWindow) -> Result<(), String> {
+    window
+        .show()
+        .map_err(|error| format!("显示覆盖窗口失败: {error}"))
 }
 
 fn apply_overlay_runtime_flags(

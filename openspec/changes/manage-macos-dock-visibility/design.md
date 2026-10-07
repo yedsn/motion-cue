@@ -68,6 +68,16 @@ macOS 通过 `motioncue://play/...` 唤醒后台实例时，可能在同一轮�
 
 动画覆盖窗口禁用 WebView 后台节流，避免窗口长期隐藏后被 WebKit 挂起，重新显示时出现计时器、`requestAnimationFrame` 或 Worker 恢复延迟。该设置只应用于按需显示的覆盖窗口，管理窗口仍使用默认节流策略。
 
+### 8. 后台状态使用 Accessory 激活策略
+
+实机验证表明，仅在 `Opened`/`Reopen` 回调后取消窗口恢复仍然太晚：LaunchServices 在投递 URL 之前已经可能激活 Regular 应用，导致 Dock 出现和调用程序失焦。管理窗口隐藏和应用冷启动阶段必须持续使用 `NSApplicationActivationPolicyAccessory`；显式打开管理窗口时再切换为 `Regular`，恢复 Dock 并聚焦窗口。
+
+应用在进入事件循环前先采用 Accessory 策略并隐藏 Dock，同时将管理窗口配置为默认不可见，并关闭 Tauri 冷启动时“忽略其他应用并激活自身”的行为。正常 GUI 启动短暂等待 URL 打开事件；若没有后台 URL 才切换为 Regular 并显示管理窗口。这样避免系统在 URL 回调到达前创建关键窗口或抢占前台，同时覆盖已运行的后台实例和由 URL Scheme 拉起的冷启动实例。
+
+后台播放回调不得重复执行 Accessory 或 Dock 隐藏转换；这些转换只在进入后台生命周期时执行一次。Tauri 在 macOS 上的普通窗口 `show()` 会调用 `makeKeyAndOrderFront`，因此动画覆盖窗口改用 AppKit `orderFrontRegardless` 在主线程置前，只显示覆盖层而不让其成为 key window。这样即使管理窗口从未显示，overlay WebView 也能独立初始化和播放。
+
+深链监听由 macOS 应用事件循环触发，不能在该回调中同步执行可能创建 WebView 窗口的 `play_request`。Tauri 的窗口创建会向事件循环发送消息并等待结果，若调用者正是事件循环线程就会互相等待。协议回调只负责解析请求和设置 Reopen 抑制，实际播放投递到阻塞任务池执行，确保首次后台播放可以创建 overlay 而不锁死应用。
+
 ## Risks / Trade-offs
 
 - [macOS Dock 显示转换是异步的，快速连续开关可能造成聚焦延迟或系统图标残留] → 复用 Tauri 运行时的节流处理，避免自行反复调用底层 AppKit，并在验收中覆盖快速关闭后立即重开。
@@ -75,6 +85,10 @@ macOS 通过 `motioncue://play/...` 唤醒后台实例时，可能在同一轮�
 - [只有 Windows 开发机时无法完整自动验证 Dock] → 保留平台无关决策单元测试，并在 macOS Apple Silicon 或 Intel 真实桌面环境执行验收清单。
 - [隐藏 Dock 后用户只能从菜单栏重新进入] → 菜单栏图标必须在关闭操作后继续存在；退出仍通过菜单栏显式完成。
 - [URL 打开与 Reopen 的系统回调顺序不固定] → 同时覆盖“Reopen 先到”和“URL 先到”两种顺序，并用短时间抑制窗口消除竞态。
+- [系统可能在 URL 回调前激活 Regular 应用] → 后台生命周期持久使用 Accessory 策略，关闭冷启动主动激活并让管理窗口默认隐藏，不依赖回调发生后再抢救性隐藏 Dock。
+- [在每次播放回调中重复隐藏 Dock 可能重入 macOS 进程类型转换] → Dock 与激活策略只在生命周期转换时修改，普通播放保持当前后台状态。
+- [普通 `show()` 可能让非聚焦 overlay 仍尝试成为 key window] → macOS 使用 `orderFrontRegardless` 非激活式显示 overlay，其他平台保留 Tauri `show()`。
+- [深链回调在主事件循环内同步创建 overlay 会自锁] → 将协议播放投递到阻塞任务池，避免窗口创建同步等待当前事件循环。
 
 ## Migration Plan
 

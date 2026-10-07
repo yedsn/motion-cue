@@ -199,7 +199,10 @@ fn forward_or_start(
 fn run(initial_intent: LaunchIntent) -> Result<(), String> {
     let initial_intent = Arc::new(std::sync::Mutex::new(Some(initial_intent)));
     let initial_intent_for_instance = initial_intent.clone();
-    let app = tauri::Builder::default()
+    let builder = tauri::Builder::default();
+    #[cfg(target_os = "macos")]
+    let builder = builder.activate_ignoring_other_apps(false);
+    let app = builder
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
@@ -226,7 +229,7 @@ fn run(initial_intent: LaunchIntent) -> Result<(), String> {
         .setup(move |app| {
             let initial_intent = initial_intent_for_instance.lock().unwrap().take();
             if matches!(initial_intent, Some(LaunchIntent::Background)) {
-                let _ = app_lifecycle::apply_dock_visibility(
+                let _ = app_lifecycle::apply_macos_app_state(
                     app.handle(),
                     ManagementWindowEvent::BackgroundStartup,
                 );
@@ -283,7 +286,11 @@ fn run(initial_intent: LaunchIntent) -> Result<(), String> {
                 for request in requests {
                     match request {
                         Ok(request) => {
-                            let _ = play_request(&deep_link_app, request.command, request.params);
+                            let playback_app = deep_link_app.clone();
+                            tauri::async_runtime::spawn_blocking(move || {
+                                let _ =
+                                    play_request(&playback_app, request.command, request.params);
+                            });
                         }
                         Err(error) => deep_link_app.state::<AppState>().diagnostics.record(
                             "error",
@@ -308,11 +315,7 @@ fn run(initial_intent: LaunchIntent) -> Result<(), String> {
                         }
                     }
                     LaunchIntent::Gui => {
-                        if let Err(error) =
-                            open_management_window(&app_handle, ManagementWindowEvent::GuiStartup)
-                        {
-                            record_lifecycle_warning(&app_handle, error);
-                        }
+                        open_gui_startup(&app_handle);
                     }
                 }
             }
@@ -364,6 +367,13 @@ fn run(initial_intent: LaunchIntent) -> Result<(), String> {
         })
         .build(tauri::generate_context!())
         .map_err(|error| format!("MotionCue 运行失败: {error}"))?;
+    #[cfg(target_os = "macos")]
+    let mut app = app;
+    #[cfg(target_os = "macos")]
+    {
+        app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+        app.set_dock_visibility(false);
+    }
     app.run(|_app, _event| {
         #[cfg(target_os = "macos")]
         if let tauri::RunEvent::Reopen { .. } = _event {
@@ -1224,10 +1234,38 @@ fn app_open(app: AppHandle) -> Result<(), String> {
     open_management_window(&app, ManagementWindowEvent::OpenRequested)
 }
 
+fn open_gui_startup(app: &AppHandle) {
+    #[cfg(target_os = "macos")]
+    {
+        if let Some(window) = app.get_webview_window("main") {
+            let _ = window.hide();
+        }
+        let app = app.clone();
+        let generation = app.state::<AppState>().macos_reopen.begin_reopen();
+        std::thread::spawn(move || {
+            std::thread::sleep(app_lifecycle::macos_reopen_delay());
+            if app
+                .state::<AppState>()
+                .macos_reopen
+                .should_restore_window(generation)
+            {
+                if let Err(error) = open_management_window(&app, ManagementWindowEvent::GuiStartup)
+                {
+                    record_lifecycle_warning(&app, error);
+                }
+            }
+        });
+    }
+    #[cfg(not(target_os = "macos"))]
+    if let Err(error) = open_management_window(app, ManagementWindowEvent::GuiStartup) {
+        record_lifecycle_warning(app, error);
+    }
+}
+
 fn open_management_window(app: &AppHandle, event: ManagementWindowEvent) -> Result<(), String> {
     let desired = app_lifecycle::desired_state(event);
     debug_assert!(desired.window_visible);
-    if let Err(error) = app_lifecycle::apply_dock_visibility(app, event) {
+    if let Err(error) = app_lifecycle::apply_macos_app_state(app, event) {
         record_lifecycle_warning(app, error);
     }
     let window = app
@@ -1248,7 +1286,7 @@ fn hide_management_window(app: &AppHandle, event: ManagementWindowEvent) -> Resu
         .get_webview_window("main")
         .ok_or_else(|| "管理窗口不存在".to_string())?;
     window.hide().map_err(|error| error.to_string())?;
-    app_lifecycle::apply_dock_visibility(app, event)
+    app_lifecycle::apply_macos_app_state(app, event)
 }
 
 fn record_lifecycle_warning(app: &AppHandle, message: String) {

@@ -19,6 +19,7 @@ pub struct ManagementWindowState {
     pub window_visible: bool,
     pub dock_visible: bool,
     pub focus_window: bool,
+    pub regular_app: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -75,6 +76,7 @@ pub const fn desired_state(event: ManagementWindowEvent) -> ManagementWindowStat
                 window_visible: true,
                 dock_visible: true,
                 focus_window: true,
+                regular_app: true,
             }
         }
         ManagementWindowEvent::BackgroundStartup | ManagementWindowEvent::CloseRequested => {
@@ -82,6 +84,7 @@ pub const fn desired_state(event: ManagementWindowEvent) -> ManagementWindowStat
                 window_visible: false,
                 dock_visible: false,
                 focus_window: false,
+                regular_app: false,
             }
         }
     }
@@ -100,7 +103,7 @@ pub fn handles_window_lifecycle(window_label: &str) -> bool {
 }
 
 #[cfg(target_os = "macos")]
-pub fn apply_dock_visibility(
+pub fn apply_macos_app_state(
     app: &tauri::AppHandle,
     event: ManagementWindowEvent,
 ) -> Result<(), String> {
@@ -108,11 +111,16 @@ pub fn apply_dock_visibility(
 
     static DOCK_SHOULD_BE_VISIBLE: AtomicBool = AtomicBool::new(true);
 
-    let visible = desired_state(event).dock_visible;
+    let desired = desired_state(event);
+    let visible = desired.dock_visible;
     DOCK_SHOULD_BE_VISIBLE.store(visible, Ordering::Release);
-    if matches!(event, ManagementWindowEvent::GuiStartup) {
-        return Ok(());
-    }
+
+    app.set_activation_policy(if desired.regular_app {
+        tauri::ActivationPolicy::Regular
+    } else {
+        tauri::ActivationPolicy::Accessory
+    })
+    .map_err(|error| error.to_string())?;
 
     app.set_dock_visibility(visible)
         .map_err(|error| error.to_string())?;
@@ -129,7 +137,7 @@ pub fn apply_dock_visibility(
 }
 
 #[cfg(not(target_os = "macos"))]
-pub fn apply_dock_visibility(
+pub fn apply_macos_app_state(
     _app: &tauri::AppHandle,
     _event: ManagementWindowEvent,
 ) -> Result<(), String> {
@@ -151,6 +159,7 @@ mod tests {
                 window_visible: true,
                 dock_visible: true,
                 focus_window: true,
+                regular_app: true,
             }
         );
     }
@@ -163,6 +172,7 @@ mod tests {
                 window_visible: false,
                 dock_visible: false,
                 focus_window: false,
+                regular_app: false,
             }
         );
     }
@@ -175,6 +185,7 @@ mod tests {
                 window_visible: true,
                 dock_visible: true,
                 focus_window: true,
+                regular_app: true,
             }
         );
     }
@@ -187,6 +198,7 @@ mod tests {
                 window_visible: false,
                 dock_visible: false,
                 focus_window: false,
+                regular_app: false,
             }
         );
     }

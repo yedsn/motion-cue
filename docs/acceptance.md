@@ -81,6 +81,9 @@ MOTION_CUE_BIN="$PWD/src-tauri/target/release/bundle/macos/MotionCue.app/Content
 - [ ] 完全退出 MotionCue 后执行一次有效的后台播放调用，确认仅出现菜单栏图标和动画覆盖层，不出现管理窗口或 Dock 图标。
 - [ ] 后台运行期间再次触发普通动画，确认动画播放不会自动显示管理窗口或 Dock 图标。
 - [ ] 管理窗口和 Dock 已隐藏时，连续通过 `motioncue://play/...` 触发动画，确认只显示覆盖动画，Dock 与管理窗口保持隐藏，发起调用的程序不失去焦点。
+- [ ] 完全退出 MotionCue 后首次通过 `motioncue://play/...` 冷启动，确认启动阶段也不短暂显示 Dock 或管理窗口，发起调用的程序始终保持焦点。
+- [ ] 启动 MotionCue 后始终不打开管理窗口，连续调用 `motioncue://play/success`，确认动画可重复播放、MotionCue 不会无响应且不需要先激活主窗口。
+- [ ] 清除已有 overlay 后首次调用 `motioncue://play/success`，确认首次创建覆盖窗口不会令 MotionCue 出现“应用程序无响应”。
 - [ ] 连续至少 10 次执行“关闭窗口 -> 立即从菜单栏重新打开”，确认没有重复 Dock 图标、窗口失焦或只剩后台进程但无法打开的状态。
 - [ ] 从菜单栏选择“退出”，确认进程、菜单栏图标和 Dock 图标均消失。
 
