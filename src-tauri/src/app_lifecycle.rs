@@ -1,3 +1,11 @@
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
+
+#[cfg(target_os = "macos")]
+const MACOS_REOPEN_DELAY: Duration = Duration::from_millis(250);
+const MACOS_PROTOCOL_REOPEN_SUPPRESSION: Duration = Duration::from_millis(750);
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ManagementWindowEvent {
     GuiStartup,
@@ -18,6 +26,46 @@ pub enum TrayManagementAction {
     None,
     Open,
     OpenAndCheckUpdate,
+}
+
+pub struct MacosReopenState {
+    generation: AtomicU64,
+    suppress_until: Mutex<Option<Instant>>,
+}
+
+impl MacosReopenState {
+    pub fn new() -> Self {
+        Self {
+            generation: AtomicU64::new(0),
+            suppress_until: Mutex::new(None),
+        }
+    }
+
+    pub fn suppress_for_protocol_playback(&self) {
+        self.generation.fetch_add(1, Ordering::AcqRel);
+        *self.suppress_until.lock().unwrap() =
+            Some(Instant::now() + MACOS_PROTOCOL_REOPEN_SUPPRESSION);
+    }
+
+    pub fn begin_reopen(&self) -> u64 {
+        self.generation.fetch_add(1, Ordering::AcqRel) + 1
+    }
+
+    pub fn should_restore_window(&self, generation: u64) -> bool {
+        if self.generation.load(Ordering::Acquire) != generation {
+            return false;
+        }
+        !self
+            .suppress_until
+            .lock()
+            .unwrap()
+            .is_some_and(|deadline| deadline > Instant::now())
+    }
+}
+
+#[cfg(target_os = "macos")]
+pub const fn macos_reopen_delay() -> Duration {
+    MACOS_REOPEN_DELAY
 }
 
 pub const fn desired_state(event: ManagementWindowEvent) -> ManagementWindowState {
@@ -56,8 +104,7 @@ pub fn apply_dock_visibility(
     app: &tauri::AppHandle,
     event: ManagementWindowEvent,
 ) -> Result<(), String> {
-    use std::sync::atomic::{AtomicBool, Ordering};
-    use std::time::Duration;
+    use std::sync::atomic::AtomicBool;
 
     static DOCK_SHOULD_BE_VISIBLE: AtomicBool = AtomicBool::new(true);
 
@@ -92,8 +139,8 @@ pub fn apply_dock_visibility(
 #[cfg(test)]
 mod tests {
     use super::{
-        desired_state, handles_window_lifecycle, tray_management_action, ManagementWindowEvent,
-        ManagementWindowState, TrayManagementAction,
+        desired_state, handles_window_lifecycle, tray_management_action, MacosReopenState,
+        ManagementWindowEvent, ManagementWindowState, TrayManagementAction,
     };
 
     #[test]
@@ -159,5 +206,28 @@ mod tests {
         assert!(handles_window_lifecycle("main"));
         assert!(!handles_window_lifecycle("overlay-monitor-1"));
         assert!(!handles_window_lifecycle("plugin-runtime"));
+    }
+
+    #[test]
+    fn protocol_playback_suppresses_the_related_macos_reopen() {
+        let state = MacosReopenState::new();
+        let generation = state.begin_reopen();
+        state.suppress_for_protocol_playback();
+        assert!(!state.should_restore_window(generation));
+    }
+
+    #[test]
+    fn recent_protocol_playback_suppresses_a_following_macos_reopen() {
+        let state = MacosReopenState::new();
+        state.suppress_for_protocol_playback();
+        let generation = state.begin_reopen();
+        assert!(!state.should_restore_window(generation));
+    }
+
+    #[test]
+    fn standalone_macos_reopen_restores_the_management_window() {
+        let state = MacosReopenState::new();
+        let generation = state.begin_reopen();
+        assert!(state.should_restore_window(generation));
     }
 }

@@ -35,6 +35,7 @@ pub struct AppState {
     pub diagnostics: Diagnostics,
     pub playback: PlaybackCoordinator,
     pub plugins_root: PathBuf,
+    pub macos_reopen: app_lifecycle::MacosReopenState,
 }
 
 pub struct TrayState {
@@ -252,6 +253,7 @@ fn run(initial_intent: LaunchIntent) -> Result<(), String> {
                 diagnostics,
                 playback: PlaybackCoordinator::new(),
                 plugins_root,
+                macos_reopen: app_lifecycle::MacosReopenState::new(),
             });
             let endpoint = invocation::endpoint_path(&data_dir);
             let app_handle = app.handle().clone();
@@ -267,8 +269,19 @@ fn run(initial_intent: LaunchIntent) -> Result<(), String> {
             }
             let deep_link_app = app.handle().clone();
             app.deep_link().on_open_url(move |event| {
-                for url in event.urls() {
-                    match parse_deep_link(url.as_str(), "protocol") {
+                let requests = event
+                    .urls()
+                    .into_iter()
+                    .map(|url| parse_deep_link(url.as_str(), "protocol"))
+                    .collect::<Vec<_>>();
+                if requests.iter().any(Result::is_ok) {
+                    deep_link_app
+                        .state::<AppState>()
+                        .macos_reopen
+                        .suppress_for_protocol_playback();
+                }
+                for request in requests {
+                    match request {
                         Ok(request) => {
                             let _ = play_request(&deep_link_app, request.command, request.params);
                         }
@@ -354,9 +367,22 @@ fn run(initial_intent: LaunchIntent) -> Result<(), String> {
     app.run(|_app, _event| {
         #[cfg(target_os = "macos")]
         if let tauri::RunEvent::Reopen { .. } = _event {
-            if let Err(error) = open_management_window(_app, ManagementWindowEvent::OpenRequested) {
-                record_lifecycle_warning(_app, error);
-            }
+            let app = _app.clone();
+            let generation = app.state::<AppState>().macos_reopen.begin_reopen();
+            std::thread::spawn(move || {
+                std::thread::sleep(app_lifecycle::macos_reopen_delay());
+                if app
+                    .state::<AppState>()
+                    .macos_reopen
+                    .should_restore_window(generation)
+                {
+                    if let Err(error) =
+                        open_management_window(&app, ManagementWindowEvent::OpenRequested)
+                    {
+                        record_lifecycle_warning(&app, error);
+                    }
+                }
+            });
         }
     });
     Ok(())

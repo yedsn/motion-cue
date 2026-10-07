@@ -2,8 +2,8 @@ use std::collections::{BTreeMap, HashMap};
 use std::sync::Mutex;
 
 use tauri::{
-    AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, WebviewUrl, WebviewWindow,
-    WebviewWindowBuilder,
+    utils::config::BackgroundThrottlingPolicy, AppHandle, Emitter, Manager, PhysicalPosition,
+    PhysicalSize, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
 };
 use uuid::Uuid;
 
@@ -149,7 +149,7 @@ impl PlaybackCoordinator {
                 let _ = window.emit("motioncue://playback", &window_request);
                 let retry_window = window.clone();
                 let retry_request = window_request.clone();
-                tauri::async_runtime::spawn(async move {
+                tauri::async_runtime::spawn_blocking(move || {
                     for delay in [150, 450, 900, 1500] {
                         std::thread::sleep(std::time::Duration::from_millis(delay));
                         let _ = retry_window.emit("motioncue://playback", &retry_request);
@@ -161,7 +161,7 @@ impl PlaybackCoordinator {
         let app_handle = app.clone();
         let timeout_session = session_id.clone();
         let timeout = session_timeout_ms(animation.duration_ms);
-        tauri::async_runtime::spawn(async move {
+        tauri::async_runtime::spawn_blocking(move || {
             std::thread::sleep(std::time::Duration::from_millis(timeout));
             if let Some(coordinator) = app_handle.try_state::<PlaybackCoordinator>() {
                 let should_stop = coordinator
@@ -178,33 +178,31 @@ impl PlaybackCoordinator {
         });
         let app_handle = app.clone();
         let topology_session = session_id.clone();
-        tauri::async_runtime::spawn(async move {
-            loop {
-                std::thread::sleep(std::time::Duration::from_millis(750));
-                let Some(coordinator) = app_handle.try_state::<PlaybackCoordinator>() else {
-                    break;
-                };
-                let expected = coordinator
-                    .active
-                    .lock()
-                    .unwrap()
-                    .as_ref()
-                    .and_then(|active| {
-                        (active.id == topology_session).then(|| active.monitor_signature.clone())
-                    });
-                let Some(expected) = expected else { break };
-                let current = monitor_signature(&app_handle).unwrap_or_default();
-                if current != expected {
-                    let diagnostics = app_handle.state::<Diagnostics>();
-                    diagnostics.record(
-                        "warning",
-                        "monitor",
-                        "播放期间显示器配置变化，已安全结束当前动画",
-                        None,
-                    );
-                    let _ = coordinator.stop(&app_handle, &diagnostics, "monitor-topology-changed");
-                    break;
-                }
+        tauri::async_runtime::spawn_blocking(move || loop {
+            std::thread::sleep(std::time::Duration::from_millis(750));
+            let Some(coordinator) = app_handle.try_state::<PlaybackCoordinator>() else {
+                break;
+            };
+            let expected = coordinator
+                .active
+                .lock()
+                .unwrap()
+                .as_ref()
+                .and_then(|active| {
+                    (active.id == topology_session).then(|| active.monitor_signature.clone())
+                });
+            let Some(expected) = expected else { break };
+            let current = monitor_signature(&app_handle).unwrap_or_default();
+            if current != expected {
+                let diagnostics = app_handle.state::<Diagnostics>();
+                diagnostics.record(
+                    "warning",
+                    "monitor",
+                    "播放期间显示器配置变化，已安全结束当前动画",
+                    None,
+                );
+                let _ = coordinator.stop(&app_handle, &diagnostics, "monitor-topology-changed");
+                break;
             }
         });
         Ok(())
@@ -520,6 +518,7 @@ fn build_overlay(
 ) -> Result<WebviewWindow, String> {
     WebviewWindowBuilder::new(app, label, WebviewUrl::App("/?view=overlay".into()))
         .title("MotionCue Overlay")
+        .background_throttling(BackgroundThrottlingPolicy::Disabled)
         .position(position.x as f64, position.y as f64)
         .inner_size(size.width as f64, size.height as f64)
         .decorations(false)
