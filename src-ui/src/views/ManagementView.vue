@@ -155,6 +155,7 @@ async function reload() {
   config.value = await getConfig();
   audioLibrary.value = await listAudioLibrary();
   config.value.settings.overlayTopmost ??= true;
+  config.value.settings.showTrayIcon ??= true;
   config.value.settings.targetFrameRate ??= 60;
   config.value.settings.defaultTransition ??= defaultTransition();
   const animation = selected.value ?? config.value.animations[0];
@@ -476,6 +477,7 @@ onUnmounted(() => {
     <section v-else-if="page === 'settings' && config" class="workspace narrow">
       <header class="workspace-header"><div><small>SETTINGS</small><h1>全局设置</h1><p>设备级偏好不会修改单个动画定义。</p></div></header>
       <div class="settings-card">
+        <label class="switch large"><input v-model="config.settings.showTrayIcon" type="checkbox" /><span><strong>显示托盘图标</strong><small>保存后生效。关闭后隐藏托盘图标，可通过重新打开应用进入设置。</small></span></label>
         <label class="switch large"><input v-model="config.settings.muted" type="checkbox" /><span><strong>全局静音</strong><small>保留所有视觉动画，但不创建可听音频输出。</small></span></label>
         <label class="switch large"><input v-model="config.settings.overlayTopmost" type="checkbox" /><span><strong>动画显示在最顶层</strong><small>关闭后，动画仍鼠标穿透且不抢焦点，但可被其他应用窗口盖住。</small></span></label>
         <label>默认目标<select v-model="config.settings.defaultTarget"><option value="all">全部显示器</option><option value="primary">主显示器</option></select></label>

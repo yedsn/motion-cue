@@ -92,6 +92,8 @@ pub struct AnimationDefinition {
 #[serde(rename_all = "camelCase")]
 pub struct GlobalSettings {
     pub muted: bool,
+    #[serde(default = "default_show_tray_icon")]
+    pub show_tray_icon: bool,
     #[serde(default = "default_overlay_topmost")]
     pub overlay_topmost: bool,
     #[serde(default = "default_target_frame_rate")]
@@ -111,6 +113,10 @@ fn default_duration_ms() -> u64 {
 }
 fn default_volume() -> f64 {
     0.6
+}
+
+fn default_show_tray_icon() -> bool {
+    true
 }
 
 fn default_overlay_topmost() -> bool {
@@ -231,6 +237,21 @@ pub fn now_ms() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn tray_visibility_defaults_and_round_trips() {
+        let settings = crate::catalog::default_config().settings;
+        assert!(settings.show_tray_icon);
+        let mut value = serde_json::to_value(settings).unwrap();
+        value.as_object_mut().unwrap().remove("showTrayIcon");
+        let legacy: GlobalSettings = serde_json::from_value(value.clone()).unwrap();
+        assert!(legacy.show_tray_icon);
+        value["showTrayIcon"] = serde_json::json!(false);
+        let disabled: GlobalSettings = serde_json::from_value(value).unwrap();
+        let restored: GlobalSettings =
+            serde_json::from_value(serde_json::to_value(disabled).unwrap()).unwrap();
+        assert!(!restored.show_tray_icon);
+    }
 
     #[test]
     fn versioned_schemas_round_trip() {

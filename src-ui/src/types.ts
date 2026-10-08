@@ -48,6 +48,7 @@ export type AnimationDefinition = {
 
 export type GlobalSettings = {
   muted: boolean;
+  showTrayIcon: boolean;
   overlayTopmost: boolean;
   targetFrameRate: number;
   defaultTarget: MonitorTarget;

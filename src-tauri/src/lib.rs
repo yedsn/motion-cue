@@ -427,54 +427,56 @@ fn setup_tray(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         )
         .menu(&menu)
         .tooltip("MotionCue");
-    tray.on_menu_event(|app, event| {
-        match app_lifecycle::tray_management_action(event.id.as_ref()) {
-            app_lifecycle::TrayManagementAction::Open => {
-                let _ = app_open(app.clone());
-            }
-            app_lifecycle::TrayManagementAction::OpenAndCheckUpdate => {
-                let _ = app_open(app.clone());
-                let _ = app.emit("motioncue://check-update", serde_json::json!({}));
-            }
-            app_lifecycle::TrayManagementAction::None => match event.id.as_ref() {
-                "stop" => {
-                    let _ = animation_stop_all(app.clone());
+    let tray = tray
+        .on_menu_event(|app, event| {
+            match app_lifecycle::tray_management_action(event.id.as_ref()) {
+                app_lifecycle::TrayManagementAction::Open => {
+                    let _ = app_open(app.clone());
                 }
-                "mute" => {
-                    let current = app.state::<AppState>().config.get();
-                    if let Ok(config) = settings_update(
-                        app.clone(),
-                        models::GlobalSettings {
-                            muted: !current.settings.muted,
-                            ..current.settings
-                        },
-                    ) {
-                        sync_tray_mute_checked(app, config.settings.muted);
+                app_lifecycle::TrayManagementAction::OpenAndCheckUpdate => {
+                    let _ = app_open(app.clone());
+                    let _ = app.emit("motioncue://check-update", serde_json::json!({}));
+                }
+                app_lifecycle::TrayManagementAction::None => match event.id.as_ref() {
+                    "stop" => {
+                        let _ = animation_stop_all(app.clone());
                     }
-                }
-                "quit" => {
-                    let _ = app.exit(0);
-                }
-                _ => {}
-            },
-        }
-    })
-    .on_tray_icon_event(|tray, event| {
-        if matches!(
-            event,
-            TrayIconEvent::Click {
-                button: MouseButton::Left,
-                button_state: MouseButtonState::Up,
-                ..
-            } | TrayIconEvent::DoubleClick {
-                button: MouseButton::Left,
-                ..
+                    "mute" => {
+                        let current = app.state::<AppState>().config.get();
+                        if let Ok(config) = settings_update(
+                            app.clone(),
+                            models::GlobalSettings {
+                                muted: !current.settings.muted,
+                                ..current.settings
+                            },
+                        ) {
+                            sync_tray_mute_checked(app, config.settings.muted);
+                        }
+                    }
+                    "quit" => {
+                        let _ = app.exit(0);
+                    }
+                    _ => {}
+                },
             }
-        ) {
-            let _ = app_open(tray.app_handle().clone());
-        }
-    })
-    .build(app)?;
+        })
+        .on_tray_icon_event(|tray, event| {
+            if matches!(
+                event,
+                TrayIconEvent::Click {
+                    button: MouseButton::Left,
+                    button_state: MouseButtonState::Up,
+                    ..
+                } | TrayIconEvent::DoubleClick {
+                    button: MouseButton::Left,
+                    ..
+                }
+            ) {
+                let _ = app_open(tray.app_handle().clone());
+            }
+        })
+        .build(app)?;
+    tray.set_visible(app.state::<AppState>().config.get().settings.show_tray_icon)?;
     Ok(())
 }
 
@@ -821,6 +823,10 @@ fn settings_update(app: AppHandle, settings: models::GlobalSettings) -> Result<A
         Ok(())
     })?;
     sync_tray_mute_checked(&app, config.settings.muted);
+    if let Some(tray) = app.tray_by_id("motioncue") {
+        tray.set_visible(config.settings.show_tray_icon)
+            .map_err(|error| format!("更新托盘图标显示状态失败: {error}"))?;
+    }
     state
         .diagnostics
         .set_retention(config.settings.diagnostics_retention);
