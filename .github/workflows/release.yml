@@ -26,6 +26,9 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
+      # Each tauri-action job reads, merges and replaces the same latest.json.
+      # Serialize publishing so one platform cannot overwrite another.
+      max-parallel: 1
       matrix:
         include:
           - name: macOS Apple Silicon

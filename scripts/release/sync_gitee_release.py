@@ -130,11 +130,21 @@ def upload_attachment(file_path: Path, upload_url: str) -> None:
 def rewrite_latest_json_urls(source_path: Path, target_path: Path, *, gitee_owner: str, gitee_repo: str) -> None:
     payload = json.loads(source_path.read_text(encoding="utf-8"))
     platforms = payload.get("platforms", {})
+    for platform, bundle in (("darwin-aarch64", "app"), ("darwin-x86_64", "app"), ("windows-x86_64", "nsis")):
+        candidates = (f"{platform}-{bundle}", platform)
+        if not any(
+            isinstance(platforms.get(key), dict)
+            and platforms[key].get("url")
+            and platforms[key].get("signature")
+            for key in candidates
+        ):
+            fail(f"latest.json is missing a signed updater artifact for {platform}; refusing to sync an incomplete release")
     for item in platforms.values():
         url = item.get("url")
         if not url:
             continue
         filename = Path(urllib.parse.urlparse(url).path).name
+        filename = strip_version_from_filename(filename)
         item["url"] = f"https://gitee.com/{gitee_owner}/{gitee_repo}/releases/download/{LATEST_RELEASE_TAG}/{filename}"
     target_path.write_text(json.dumps(payload, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
 
