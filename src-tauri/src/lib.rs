@@ -262,6 +262,8 @@ fn run(initial_intent: LaunchIntent) -> Result<(), String> {
             let app_handle = app.handle().clone();
             start_server(app.handle().clone(), endpoint, handle_ipc)?;
             setup_tray(app)?;
+            app_lifecycle::register_macos_link_receiver(app.handle());
+            #[cfg(any(target_os = "windows", target_os = "linux"))]
             if let Err(error) = app.deep_link().register_all() {
                 app.state::<AppState>().diagnostics.record(
                     "warning",
@@ -272,6 +274,7 @@ fn run(initial_intent: LaunchIntent) -> Result<(), String> {
             }
             let deep_link_app = app.handle().clone();
             app.deep_link().on_open_url(move |event| {
+                app_lifecycle::record_macos_event(&deep_link_app, "protocol-received");
                 let requests = event
                     .urls()
                     .into_iter()
@@ -377,6 +380,7 @@ fn run(initial_intent: LaunchIntent) -> Result<(), String> {
     app.run(|_app, _event| {
         #[cfg(target_os = "macos")]
         if let tauri::RunEvent::Reopen { .. } = _event {
+            app_lifecycle::record_macos_event(_app, "reopen-received");
             let app = _app.clone();
             let generation = app.state::<AppState>().macos_reopen.begin_reopen();
             std::thread::spawn(move || {
@@ -483,6 +487,9 @@ fn sync_tray_mute_checked(app: &AppHandle, muted: bool) {
 fn handle_ipc(app: &AppHandle, command: IpcCommand) -> IpcResponse {
     match command {
         IpcCommand::Play { request } => {
+            app.state::<AppState>()
+                .macos_reopen
+                .suppress_for_protocol_playback();
             match play_request(app, request.command.clone(), request.params) {
                 Ok(()) => IpcResponse {
                     ok: true,
@@ -598,6 +605,7 @@ fn play_request(
     command: String,
     params: BTreeMap<String, String>,
 ) -> Result<(), String> {
+    app_lifecycle::record_macos_event(app, "play-request");
     let state = app.state::<AppState>();
     let result = state
         .playback
@@ -1263,6 +1271,14 @@ fn open_gui_startup(app: &AppHandle) {
 }
 
 fn open_management_window(app: &AppHandle, event: ManagementWindowEvent) -> Result<(), String> {
+    app.state::<AppState>().macos_reopen.explicit_open();
+    app_lifecycle::record_macos_event(
+        app,
+        match event {
+            ManagementWindowEvent::GuiStartup => "gui-startup-open",
+            _ => "management-open",
+        },
+    );
     let desired = app_lifecycle::desired_state(event);
     debug_assert!(desired.window_visible);
     if let Err(error) = app_lifecycle::apply_macos_app_state(app, event) {
@@ -1280,6 +1296,7 @@ fn open_management_window(app: &AppHandle, event: ManagementWindowEvent) -> Resu
 }
 
 fn hide_management_window(app: &AppHandle, event: ManagementWindowEvent) -> Result<(), String> {
+    app_lifecycle::record_macos_event(app, "management-hide");
     let desired = app_lifecycle::desired_state(event);
     debug_assert!(!desired.window_visible);
     let window = app

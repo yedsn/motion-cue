@@ -253,7 +253,16 @@ fn plugin_animation(manifest: &PluginManifest) -> AnimationDefinition {
 
 fn safe_relative(value: &str) -> Result<PathBuf, String> {
     let path = Path::new(value);
-    if path.is_absolute()
+    // Packages are portable: reject Windows separators and drive prefixes
+    // even when validation runs on a Unix host.
+    let windows_drive = value.as_bytes().get(1) == Some(&b':')
+        && value
+            .as_bytes()
+            .first()
+            .is_some_and(u8::is_ascii_alphabetic);
+    if windows_drive
+        || value.contains('\\')
+        || path.is_absolute()
         || path.components().any(|component| {
             matches!(
                 component,
@@ -322,6 +331,9 @@ mod tests {
     fn rejects_path_traversal() {
         assert!(safe_relative("../secret.txt").is_err());
         assert!(safe_relative("C:/secret.txt").is_err());
+        assert!(safe_relative("C:secret.txt").is_err());
+        assert!(safe_relative(r"..\secret.txt").is_err());
+        assert!(safe_relative(r"\\server\secret.txt").is_err());
         assert!(safe_relative("assets/main.js").is_ok());
     }
 

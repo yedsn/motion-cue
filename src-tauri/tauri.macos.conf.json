@@ -1,0 +1,22 @@
+{
+  "build": {
+    "beforeBuildCommand": "node scripts/macos/prepare-link-receiver.mjs && npm run build",
+    "beforeDevCommand": "node scripts/macos/prepare-link-receiver.mjs && npm run dev",
+    "beforeBundleCommand": "node scripts/macos/prepare-link-receiver.mjs"
+  },
+  "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": []
+      }
+    }
+  },
+  "bundle": {
+    "resources": {
+      "target/link-receiver/MotionCueLink.app/": "MotionCueLink.app/"
+    },
+    "macOS": {
+      "signingIdentity": "-"
+    }
+  }
+}

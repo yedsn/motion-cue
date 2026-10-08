@@ -2207,11 +2207,12 @@ dependencies = [
 
 [[package]]
 name = "motion-cue"
-version = "0.1.10"
+version = "0.1.14"
 dependencies = [
  "base64 0.22.1",
  "directories",
  "mime_guess",
+ "objc2",
  "objc2-app-kit",
  "rand",
  "serde",
