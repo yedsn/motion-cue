@@ -4,11 +4,11 @@
 
 - [ ] 1.1 在生命周期和链接接收路径加入不含用户文本的事件顺序与激活状态诊断，使用当前打包版复现关闭窗口后的普通 URL 调用，记录处理应用路径、系统版本和失焦阶段以验证定位结果
 - [x] 1.2 新增 macOS Info.plist 的 LSUIElement=true 合并配置，构建 app 并用 plutil 检查产物后台声明、应用标识及 motioncue URL 注册均存在
-- [ ] 1.3 在真实打包版验证后台身份与动态 Regular/Accessory 切换，覆盖冷启动播放、Finder 打开、菜单栏打开和关闭后的 Dock 状态，将步骤及观察结果写入 docs/acceptance.md
+- [x] 1.3 在真实打包版验证后台身份与动态 Regular/Accessory 切换，覆盖冷启动播放、Finder 打开、菜单栏打开和关闭后的 Dock 状态，将步骤及观察结果写入 docs/acceptance.md
 
 ## 2. 播放与管理窗口激活边界
 
-- [ ] 2.1 在 app_lifecycle.rs 和 lib.rs 统一播放、显式打开、GUI 启动和 Reopen 决策，避免播放触发激活或改变已有窗口可见性，用 Rust 测试验证后台及管理窗口可见时的播放决策
+- [x] 2.1 在 app_lifecycle.rs 和 lib.rs 统一播放、显式打开、GUI 启动和 Reopen 决策，避免播放触发激活或改变已有窗口可见性，用 Rust 测试验证后台及管理窗口可见时的播放决策
 - [x] 2.2 修正待执行 GUI/Reopen 打开动作与有效播放请求之间的取消和仲裁，增加两种事件顺序、迟到 URL、重复播放与显式打开测试，通过 cargo test 验证，不仅调整固定延迟常量
 - [x] 2.3 检查首次创建及复用 overlay 的非激活路径，保持主线程 AppKit 显示及深链回调外创建窗口，通过首次后台播放和连续不同文本播放验证动画正常且不获取焦点
 - [x] 2.4 在普通 URL 调用下验证管理窗口可见但其他应用在前台的焦点保持；若仍被系统激活，记录失败并修订设计后再继续实现，不以恢复焦点或要求调用方使用 open -g 判定通过
@@ -16,12 +16,12 @@
 
 ## 3. 集成验证
 
-- [ ] 3.1 运行 npm test、npm run build、cargo test --manifest-path src-tauri/Cargo.toml 和 openspec validate preserve-macos-playback-focus --strict，记录各项结果并确认平台条件未改变 Windows 行为
-- [ ] 3.2 构建 app/dmg，确认系统协议处理路径为本次产物且没有开发版或旧实例干扰；从实际调用应用持续输入并触发普通播放链接，逐项记录触发前、播放中和结束后的焦点及输入结果
-- [ ] 3.3 实机回归 Finder 正常启动、菜单栏打开和检查更新、CLI open、单实例、退出、至少十次快速关闭重开，将结果关联到原 manage-macos-dock-visibility 待验收项，全部通过后才标记本变更完成
+- [x] 3.1 运行 npm test、npm run build、cargo test --manifest-path src-tauri/Cargo.toml 和 openspec validate preserve-macos-playback-focus --strict，记录各项结果并确认平台条件未改变 Windows 行为
+- [x] 3.2 构建 app/dmg，确认系统协议处理路径为本次产物且没有开发版或旧实例干扰；从实际调用应用持续输入并触发普通播放链接，逐项记录触发前、播放中和结束后的焦点及输入结果
+- [x] 3.3 实机回归 Finder 正常启动、菜单栏打开和检查更新、CLI open、单实例、退出、至少十次快速关闭重开，将结果关联到原 manage-macos-dock-visibility 待验收项，全部通过后才标记本变更完成
 
 ## 4. 已批准的独立链接接收入口
 
 - [x] 4.1 实现禁止激活的原生 macOS URL 接收器，严格限定 motioncue 播放链接，使用主包可执行文件转发，验证无 shell 和无任意可执行路径输入
 - [x] 4.2 接入 macOS 构建 hook、资源打包和协议注册，验证目标架构、主包无重复协议声明、接收器包及 app/dmg 产物
-- [ ] 4.3 用普通系统链接回归冷启动、后台和管理窗口可见三种场景，记录原应用焦点保持和播放结果，再执行管理窗口/Dock 回归
+- [x] 4.3 用普通系统链接回归冷启动、后台和管理窗口可见三种场景，记录原应用焦点保持和播放结果，再执行管理窗口/Dock 回归
